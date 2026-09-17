@@ -1,288 +1,267 @@
-# Forest Disturbance Attribution Pipeline (Hansen GFC × Fire × Wind)
+# EU Forest Observatory: Forest Loss Monitoring
 
-This repository documents a processing pipeline that combines the **Hansen Global
-Forest Change (GFC)** dataset with a global **fire-driven forest loss** product
-(Tyukavina et al.) to separate forest loss into **fire-related** and
-**non-fire (background/other disturbance)** components, statistically flag
-**anomalous ("outlier") loss events** as likely large-scale windthrow/storm
-damage, and finally produce **country-level annual statistics** of forest loss
-attributed to fire, wind, and all other drivers.
+Google Earth Engine and R workflow for producing annual forest-loss layers, aggregating them to a 0.2-degree grid, detecting extreme loss events, and generating country-level statistics by disturbance type.
 
-The pipeline spans two environments:
+## Overview
 
-- **Google Earth Engine (GEE)** — JavaScript code editor scripts for raster
-  processing, aggregation, and export.
-- **R** — post-processing of GEE exports to detect statistical outliers
-  (windthrow mask), which is then re-ingested into GEE as an asset.
+This repository documents a processing chain developed for the EU Forest Observatory. The workflow combines:
 
-## Pipeline overview
+1. Hansen Global Forest Change data for tree cover and annual forest loss.
+2. An annual fire-related forest-loss product used to exclude fire-affected pixels from the harvest-oriented layers.
+3. Google Earth Engine aggregation from approximately 30 m to a nominal 0.02-degree grid, referred to in the scripts as approximately 2 km.
+4. A second Earth Engine aggregation from the approximately 2 km layers to a 0.2-degree grid, referred to as approximately 20 km.
+5. An R-based robust outlier procedure based on the median and median absolute deviation (MAD).
+6. A final Earth Engine workflow producing country-level annual statistics for total forest loss, fire-related loss, and extreme-loss events.
+7. The Curtis et al. forest-loss-driver map for contextual interpretation of disturbance causes.
 
-```mermaid
-flowchart TD
-    A[1_prepare_loss_forest_gee.js\nHansen GFC + fire mask\n→ per-year loss & forest layers at ~2km] --> B[2_aggregate_export_gee.js\nStack annual loss bands\n+ aggregate to 20km\n→ export to Drive as GeoTIFF]
-    B --> C[3_outlier_detection.R\nCompute loss ratio Rho\nMedian + MAD outlier test\n→ MASKGEE tif]
-    C --> D[Manual step: ingest MASKGEE\nGeoTIFF as GEE Image asset]
-    D --> E[4_country_stats_gee.js\nHansen GFC + fire layer + wind mask\n+ GAUL country boundaries\n→ per-country annual CSVs\nAll loss / Fire loss / Wind loss]
-```
+The analysis follows the conceptual approach described in Ceccherini et al. (2020), including spatial aggregation and the separation of abrupt or extreme disturbances from the normal loss signal. The original Nature study and its reproducibility materials are available through Zenodo: [code](https://doi.org/10.5281/zenodo.3687096) and [data](https://doi.org/10.5281/zenodo.3687090).
 
-## 1. Data sources
+## Repository structure
 
-| Dataset | Asset ID | Role |
-|---|---|---|
-| Hansen Global Forest Change v1.13 (2025) | `UMD/hansen/global_forest_change_2025_v1_13` | Tree cover 2000, annual loss, loss year, gain |
-| Tyukavina et al. fire-driven forest loss (annual) | `users/sashatyu/2001-2025_fire_forest_loss_annual` | Per-pixel year of fire-attributed loss, used to mask out fire pixels |
-| Tyukavina et al. fire-driven forest loss (driver class) | `users/sashatyu/2001-2025_fire_forest_loss` | Driver class 3–5 used as a fire flag |
-| LSIB Simple country boundaries | `USDOS/LSIB_SIMPLE/2017` | Country-level clipping (early exploratory step, largely commented out) |
-| GAUL Level 1 boundaries | `FAO/GAUL/2015/level1` | Country boundaries used for the final zonal statistics (via `ADM0_CODE`) |
-| Curtis et al. deforestation drivers | `projects/tmf-monitoring/assets/CurtisDrivers2018/FilledMap` | Used to restrict the analysis to a specific driver class (class 3) |
-| Custom windthrow mask (this pipeline's own output) | `projects/ee-guido/assets/MASKGEE2025Fires` | Statistically derived flag of anomalous loss years per 20km cell (see R script) |
-
-## 2. Script-by-script description
-
-### 2.1 `1_prepare_loss_forest_gee.js` — Forest & annual loss preparation (GEE)
-
-**Purpose:** build a forest/non-forest baseline from Hansen GFC, remove fire
-pixels, split annual loss into yearly binary masks, and aggregate everything
-from native 30 m resolution to a coarser regular grid (~2 km, `scale =
-2226.39` m, `EPSG:4326`, 0.02° pixels) for tractable global export.
-
-**Key steps:**
-1. Load Hansen GFC 2025 v1.13 and the Tyukavina annual fire-loss mosaic
-   (`EFFIS_TOT`), unmasking the latter so non-fire pixels become 0.
-2. Define a **forest threshold** (`treecover2000 ≥ forest_threshold`, default
-   10%) to build a forest/non-forest mask.
-3. Mask out pixels with `gain = 1` (avoid conflating gain with loss/forest).
-4. Mask out any pixel flagged as fire loss in the Tyukavina product
-   (`EFFIS_TOT.select('b1').eq(0)` keeps only non-fire pixels), so the
-   resulting `treecover`/`lossyear` layers represent **non-fire forest loss
-   only**.
-5. Decompose `lossyear` into 25 individual binary layers, one per year
-   (`loss_2001` … `loss_2025`), each equal to 1 where loss occurred in that
-   year and the pixel was forest.
-6. Build a cumulative **forest-state** stack (`forest2000` → `forest2025`) by
-   progressively zeroing out pixels lost in each year (note: due to a copy‑paste
-   pattern from `forest2022` onward, later "cumulative" layers are not fully
-   chained — see *Known issues* below).
-7. Compute `Pixel_per_cell`: for each output cell, the count of native 30 m
-   Landsat pixels contained within it (used downstream in R to normalize
-   percentages).
-8. Aggregate every yearly loss layer and the forest layer from 30 m to
-   ~2 km using `reduceResolution(ee.Reducer.sum().unweighted(), maxPixels =
-   65536)` followed by `reproject` to a 0.02°/pixel `EPSG:4326` grid. This
-   yields, for each cell, the **count of lost/forest 30 m pixels**.
-9. Export each yearly loss layer (`loss_2001_at_15km` … `loss_2025_at_15km`,
-   note the variable name references "15km" but the reprojection scale is
-   actually ~2 km) and the `forest2000_at_15km` layer as **GEE Image assets**
-   (`Export.image.toAsset`), clipped to a study region `AOItot` (must be
-   defined/drawn in the code editor — not included in the script as shown).
-
-**Outputs (GEE assets):**
-- `Forest2000_at_2km_2025GlobalFires_10`
-- `loss_2001_at_2km_2025GlobalFires_10` … `loss_2025_at_2km_2025GlobalFires_10`
-  (one asset per year, 2001–2025)
-
-**Note:** most `Export.image.toAsset` calls for individual years must be run
-manually one at a time (or via GEE's Task queue), as each is a separate task.
-
----
-
-### 2.2 `2_aggregate_export_gee.js` — Stacking and 20 km aggregation (GEE)
-
-**Purpose:** load the previously exported per-year assets, stack them into a
-single multi-band image, further aggregate to a coarser 20 km grid, and
-export the results to Google Drive as GeoTIFFs for R analysis.
-
-**Key steps:**
-1. Load the `Forest2000_at_2km...` asset and each `loss_YYYY_at_2km...` asset
-   (2004–2025) produced by script 1.
-2. Stack all annual loss images into a single multi-band image `Final_loss`
-   (one band per year, 2004–2025).
-3. Aggregate `Final_loss` from ~2 km to 20 km (`scale = 0.2°`,
-   `22263.898` m) using the same
-   `reduceResolution(sum, unweighted) → reproject` pattern, summing pixel
-   counts across the coarser cell.
-4. Aggregate the `Forest2000` layer the same way, to obtain the number of
-   forest pixels per 20 km cell.
-5. Export both aggregated images to **Google Drive** (`Export.image.toDrive`)
-   as `FinalLoss_at_20km_2025Fires.tif` and `Forest2000_at_20km_2025Fires.tif`.
-
-**Outputs (Google Drive, GeoTIFF):**
-- `FinalLoss_at_20km_2025Fires.tif` — multi-band, one band per year of
-  non-fire forest loss (pixel counts) at 20 km
-- `Forest2000_at_20km_2025Fires.tif` — forest pixel count at 20 km
-
----
-
-### 2.3 `3_outlier_detection.R` — Statistical outlier (windthrow) detection
-
-**Purpose:** using the 20 km rasters exported from GEE, compute a normalized
-loss ratio per year and cell, and flag cells/years where loss is a
-statistical outlier relative to the cell's own long-term distribution — used
-as a proxy for large, discrete disturbance events (e.g., windstorms) rather
-than the diffuse background of loss.
-
-**Key steps:**
-1. Load `FinalLoss_at_20km_2025Fires.tif` (`Final_loss`, multi-band, one band
-   per year) and `Forest2000_at_20km_2025Fires.tif` (`Forest`, single band)
-   with the `raster` package.
-2. Note the number of native 30 m Landsat pixels contained in one 0.2°
-   cell (**640,000**), used to convert forest pixel counts to a forest
-   fraction (`Forest / 640000`).
-3. Compute **Rho**: forest loss as a **percentage of forest area per cell per
-   year** — `Rho = (Final_loss / Forest[[1]]) * 100`. Zero values are set to
-   `NA` (no loss recorded).
-4. Compute, per cell, across all years:
-   - `RhoM` — per-pixel **median** of Rho across years
-   - `RhoMean` — per-pixel **mean**
-   - `Rhomad` — per-pixel **MAD** (median absolute deviation)
-   - `Rhosd` — per-pixel **standard deviation**
-5. Flag an outlier year/cell as `Rho > (RhoM + 3·MAD)` **and** `Rho > 3%`
-   **and** forest fraction `> 5%` (to exclude near-zero-forest cells from
-   spurious ratios). Flagged cells/years are set to `100`, everything else to
-   `NA`, then binarized to `1`.
-6. Collapse the multi-year outlier stack to a single band with `max()`,
-   producing a binary "has this cell ever had an outlier loss year" summary
-   (`Rho2`, plotted for QA) — while the *per-year* binary outlier stack (also
-   called `Rho2`, recomputed just below without the `max()` collapse) is what
-   is actually written to disk.
-7. Write two GeoTIFFs:
-   - `MASKGEE2025Fires.tif` — the multi-band, per-year **binary outlier mask**
-     (1 = statistically anomalous loss year for that cell, i.e. candidate
-     wind/storm disturbance)
-   - `ForestHarvest_04_25Fires.tif` — the underlying multi-band `Rho`
-     (percent loss) raster, saved for reference/inspection
-
-**Outputs:**
-- `Data2025/MASKGEE2025Fires.tif` (binary outlier/windthrow mask, per year)
-- `Data2024/ForestHarvest_04_25Fires.tif` (percent-loss raster, per year)
-
-**Manual step (not scripted):** `MASKGEE2025Fires.tif` is manually uploaded
-and ingested as a GEE **Image asset**
-(`projects/ee-guido/assets/MASKGEE2025Fires`), which becomes the `WindMap`
-input of the final script.
-
----
-
-### 2.4 `4_country_stats_gee.js` — Country-level annual statistics (GEE)
-
-**Purpose:** produce per-country, per-year forest loss statistics (area in
-m²) split into three categories — **all non-forest-driver loss**, **fire
-loss**, and **wind loss** — using native-resolution (30 m) Hansen GFC data,
-restricted to a specific deforestation-driver class from Curtis et al., and
-exported as CSV per country.
-
-**Key steps:**
-1. Load the windthrow mask asset (`WindMap`,
-   `projects/ee-guido/assets/MASKGEE2025Fires`, output of the R script),
-   the GAUL Level 1 country boundaries, the Curtis et al. driver map, and the
-   Tyukavina fire-loss products (both the coarse driver-class mosaic and the
-   annual mosaic).
-2. Build a fire flag `fire_loss` = Curtis-independent Tyukavina driver values
-   in **[3, 5]** (i.e., fire-related driver classes).
-3. Convert `WindMap`'s per-year binary bands (`b8`…`b22`, corresponding to
-   loss years 2011–2025) into a single-band categorical `WIND_TOT` image
-   where pixel value = the **year** (11–25, i.e. 2011–2025) in which an
-   outlier/wind event was flagged for that cell (later bands overwrite
-   earlier ones where multiple years are flagged, so `WIND_TOT` keeps the
-   most recent flagged year encountered in iteration order).
-4. Derive `WIND_1621`: a binary layer, 1 where `WIND_TOT ≥ 11`
-   (i.e., any flagged wind year from 2011 onward), 0 elsewhere — the wind
-   mask used to split loss into "wind" vs "not wind".
-5. Restrict analysis to `CURTIS.eq(3)` (a specific deforestation driver class
-   from the Curtis et al. map, e.g. one of the "commodity-driven" or similar
-   classes depending on the Curtis legend) by masking `gfc` before extracting
-   `treecover`, `gain`, `loss`, `lossyear`.
-6. Iterate over a **hard-coded list of ~271 country codes**
-   (`list_c`, GAUL `ADM0_CODE` values), their 2-letter labels (`list_cL`), and
-   per-country **forest-cover thresholds** (`list_t`, ranging 10–50%,
-   presumably calibrated per country/biome). The loop as shown runs `y = 150`
-   to `206` (i.e., a specific subset of the country list — adjust the loop
-   bounds to process all countries).
-7. For each country:
-   - Build the forest mask at the country-specific threshold.
-   - **Export 1 — "All loss":** `loss` masked to forest, multiplied by pixel
-     area, grouped-summed by `lossyear` within the country geometry
-     (simplified to 5 km tolerance), reducer resolution 30 m. Reshaped from
-     long to wide format and exported as
-     `Country_Forest_Change_EUOBS_<code>.csv`.
-   - **Export 2 — "Fire loss":** `loss` masked to forest **and** to
-     `WIND_1621.eq(0)` (i.e., loss that is *not* flagged as wind), grouped by
-     the Tyukavina annual fire-year band (`b1`). Exported as
-     `Country_Forest_Change_EUOBS_fires<code>.csv`.
-   - **Export 3 — "Wind loss":** `loss` masked to forest **and** to
-     `WIND_1621.eq(1)` (i.e., loss flagged as an outlier/wind year), grouped
-     by `lossyear`. Exported as
-     `Country_Forest_Change_EUOBS_Wind<code>.csv`.
-   - All three tables are exported to Google Drive folder `EUForObs11_25`.
-
-**Outputs (Google Drive CSVs, per country, per category):**
-- `Country_Forest_Change_EUOBS_<CC>.csv` — total forest loss area by year
-- `Country_Forest_Change_EUOBS_fires<CC>.csv` — fire-attributed loss area by
-  year
-- `Country_Forest_Change_EUOBS_Wind<CC>.csv` — wind/outlier-attributed loss
-  area by year
-
-## 3. Requirements
-
-**Google Earth Engine**
-- A GEE account/project with write access to `projects/ee-guido/assets/...`
-  (or update asset paths to your own project).
-- Access to the public assets listed in §1 (Hansen GFC, `USDOS/LSIB_SIMPLE`,
-  `FAO/GAUL/2015/level1`) and to the third-party `users/sashatyu/...` and
-  `projects/tmf-monitoring/...` assets (verify sharing/visibility with the
-  asset owners if access fails).
-- A geometry named `AOItot` (study area) and `countries` must be defined in
-  the GEE Code Editor session — they are referenced but not created in the
-  scripts as provided.
-
-**R**
-- R ≥ 4.x with packages: `raster`, `tidyverse` (only `raster` functions are
-  actually used in the shown code; `sp`/`rgdal`/`rgeos` are commented out as
-  legacy/deprecated dependencies).
-- Local folder structure: `Data2025/` (containing the GEE Drive exports) and
-  `Data2024/` (output location for the reference percent-loss raster).
-
-## 4. Known issues / things to check before re-running
-
-- **`AOItot` and `countries`** are used but never defined in the provided
-  scripts — they must exist as drawn geometries or be added at the top of
-  script 1 and script 4.
-- In script 1, the cumulative `forestYYYY` chain is built correctly through
-  `forest2021`, but `forest2022`, `forest2023`, `forest2024`, and `forest2025`
-  are all derived from `forest2020` rather than chaining from the previous
-  year — this looks like a copy-paste bug and should be fixed
-  (`forest2022 = forest2021.where(loss_2022.eq(1), 0)`, etc.) if the
-  cumulative forest-state layers for 2022–2025 are needed downstream.
-- In script 4, `WIND_TOT` is built by sequentially overwriting a single band
-  with `.where()` calls per year; where a cell qualifies in multiple years,
-  only the **last-applied** (highest band index, i.e. most recent year in the
-  iteration order 2011→2025) value survives — this is a "most recent
-  qualifying year" encoding, not a full year-by-year record.
-- The exploratory EU-boundary filtering block (`EU`, `EU_b`) and the
-  `MaskEFFIS`/`FIRES` block at the top of script 1 are commented out; confirm
-  whether a study-area restriction is still intended before large-scale runs.
-- Script 4's country loop currently runs only `y = 150` to `206`; extend to
-  `y = 0` … `list_c.length - 1` to process the full country list, or run in
-  batches to stay within GEE's concurrent task limits.
-- Variable names containing `_at_15km` in script 1 actually correspond to a
-  ~2 km (0.02°) reprojection, not 15 km — naming is inherited from an earlier
-  version of the pipeline and does not reflect the actual scale used.
-- `Export.image.toAsset` / `Export.table.toDrive` tasks are **not** executed
-  automatically — each must be manually started (or scripted via the GEE
-  batch/Tasks API) from the Tasks tab in the Code Editor.
-
-## 5. Suggested repository layout
-
-```
+```text
 .
 ├── README.md
 ├── gee/
-│   ├── 1_prepare_loss_forest_gee.js
-│   ├── 2_aggregate_export_gee.js
-│   └── 4_country_stats_gee.js
-├── r/
-│   └── 3_outlier_detection.R
-└── data/
-    ├── Data2025/        # GEE Drive exports + MASKGEE output (not versioned; large files)
-    └── Data2024/         # reference percent-loss raster
+│   ├── 01_prepare_annual_loss_assets.js
+│   ├── 02_aggregate_to_20km.js
+│   └── 04_country_statistics.js
+├── R/
+│   └── 03_detect_extreme_loss.R
+├── data/
+│   ├── raw/                 # Local GeoTIFFs downloaded from Earth Engine
+│   ├── intermediate/        # R-derived rasters and intermediate products
+│   └── README.md
+├── docs/
+│   ├── workflow.md
+│   └── data_dictionary.md
+└── CITATION.cff
 ```
+
+The code supplied for this documentation should be split into the files above. Asset IDs, Drive folders, regions, country lists, and local paths must be adapted to the execution account and project.
+
+## Workflow
+
+### 1. Prepare annual loss assets
+
+`gee/01_prepare_annual_loss_assets.js` loads:
+
+- `UMD/hansen/global_forest_change_2025_v1_13`;
+- `users/sashatyu/2001-2025_fire_forest_loss_annual`;
+- an analysis region, currently represented by `AOItot` in the script.
+
+The Hansen product is a 30.92 m Landsat-derived dataset covering 2000–2025. Its `treecover2000` band represents canopy cover in 2000, while `lossyear` encodes loss years as 1–25 for 2001–2025. The official Earth Engine catalogue documents the product and its bands at [Hansen Global Forest Change v1.13](https://developers.google.com/earth-engine/datasets/catalog/UMD_hansen_global_forest_change_2025_v1_13).
+
+The script applies the following masks:
+
+- `treecover2000 >= forest_threshold`, with the default threshold set to 10%.
+- `gain < 1`, excluding pixels classified as forest gain.
+- Annual fire mask equal to zero, excluding pixels identified by the fire product.
+
+For each year, a binary loss layer is produced using `lossyear.eq(year_code)`. The script also constructs a cumulative forest-presence sequence beginning in 2000. These forest-presence layers are intended to represent the initial forest denominator for subsequent aggregation.
+
+Each binary annual loss layer and the 2000 forest layer is aggregated with:
+
+```javascript
+.reduceResolution(ee.Reducer.sum().unweighted(), false, 65536)
+.reproject(ee.Projection('EPSG:4326').scale(0.02, 0.02))
+```
+
+The resulting values are sums of source pixels within the target grid cell. They should therefore be interpreted as counts of approximately 30 m pixels, not directly as hectares or percentages.
+
+The script exports one Earth Engine asset per year and one 2000 forest-denominator asset. The export names follow this pattern:
+
+```text
+Forest2000_at_2km_2025GlobalFires_10
+loss_YYYY_at_2km_2025GlobalFires_10
+```
+
+Despite the historical variable names `at_15km` and `at_2km`, the target projection uses 0.02 degrees. At the equator this is approximately 2.2 km, while the physical north–south and east–west dimensions vary with latitude.
+
+### 2. Aggregate annual assets to approximately 20 km
+
+`gee/02_aggregate_to_20km.js` loads the annual approximately 2 km loss assets, stacks them into `Final_loss`, and applies a second sum aggregation to a 0.2-degree grid:
+
+```javascript
+Final_loss
+  .reduceResolution(ee.Reducer.sum().unweighted(), false, 65536)
+  .reproject(ee.Projection('EPSG:4326').scale(0.2, 0.2))
+```
+
+The script exports:
+
+- `FinalLoss_at_20km_2025Fires.tif`, containing one band per annual loss layer;
+- `Forest2000_at_20km_2025Fires.tif`, containing the aggregated 2000 forest denominator.
+
+The scale used in the export is approximately 22,264 m. This is a nominal scale corresponding to 0.2 degrees at the equator; it is not a constant metric 20 km grid globally.
+
+The current supplied script loads loss assets from 2004 onward. If the complete 2001–2025 time series is required, add the 2001–2003 assets and verify the band order before export.
+
+### 3. Detect extreme loss events in R
+
+`R/03_detect_extreme_loss.R` reads the two 0.2-degree GeoTIFFs with the `raster` package:
+
+```r
+Final_loss <- stack("Data2025/FinalLoss_at_20km_2025Fires.tif")
+Forest <- stack("Data2025/Forest2000_at_20km_2025Fires.tif")
+```
+
+The script first calculates the annual loss percentage relative to the 2000 forest-pixel denominator:
+
+```r
+Rho <- (Final_loss / Forest[[1]]) * 100
+Rho[Rho == 0] <- NA
+```
+
+It then calculates cell-wise temporal summary statistics:
+
+- median;
+- mean;
+- MAD;
+- standard deviation.
+
+The classification rule is:
+
+```r
+Rho > RhoM + 3 * Rhomad &
+Rho > 3 &
+(Forest / 640000) > 0.05
+```
+
+A cell is classified as an extreme-loss event when its annual relative loss exceeds the temporal median by three MADs, exceeds 3%, and contains more than 5% forest cover according to the approximate source-pixel denominator. The binary mask is written to:
+
+```text
+Data2025/MASKGEE2025Fires.tif
+```
+
+The continuous relative-loss time series is written to:
+
+```text
+Data2025/ForestHarvest_04_25Fires.tif
+```
+
+The R-derived mask is then uploaded to Earth Engine as the asset used by the country-statistics script.
+
+### 4. Produce country-level statistics
+
+`gee/04_country_statistics.js` combines:
+
+- the R-derived extreme-event mask;
+- the Curtis driver map;
+- the Hansen tree-cover and loss bands;
+- annual fire-loss layers;
+- country boundaries;
+- country-specific tree-cover thresholds.
+
+The Curtis layer is loaded as:
+
+```javascript
+ee.Image("projects/tmf-monitoring/assets/CurtisDrivers2018/FilledMap")
+```
+
+The code restricts the Hansen analysis to `CURTIS.eq(3)`, which must be verified against the metadata and legend of the particular Curtis asset before interpreting the selected driver class. The script then builds a year-coded extreme-event image from the multiband R mask. Bands `b8` through `b22` are mapped to years 2011–2025 using the values 11–25.
+
+For each country, the script applies the corresponding country-specific threshold from `list_t`. It then calculates annual area statistics at 30 m using pixel area and grouped reducers.
+
+Three CSV outputs are produced:
+
+1. `Country_Forest_Change_EUOBS_<country>.csv` — all forest loss by loss year.
+2. `Country_Forest_Change_EUOBS_fires<country>.csv` — fire-related loss, excluding cells classified as extreme events by the wind/extreme mask.
+3. `Country_Forest_Change_EUOBS_Wind<country>.csv` — loss in cells classified as extreme events.
+
+The grouped reducer converts the `lossyear` or annual fire/extreme-event code into wide columns such as `sum_1`, `sum_2`, and so forth. The values are areas in square metres because loss pixels are multiplied by `ee.Image.pixelArea()`.
+
+## Important implementation notes
+
+### Naming and spatial scale
+
+Several variable and export names still contain legacy labels such as `15km` and `2km`. The actual target grids are defined by angular projections of 0.02 and 0.2 degrees. Use explicit names such as `grid_0p02deg` and `grid_0p2deg` in a cleaned-up version to avoid confusion.
+
+
+### Fire and extreme-event terminology
+
+The supplied variable names use `WIND`, but the R mask is generated from temporal outliers in the aggregated loss series. It should therefore be called an `extreme_loss` or `abrupt_loss` mask unless it has been independently validated as wind damage. If the mask is specifically intended to represent windstorms, document the external windstorm layer, temporal coverage, and exclusion rule.
+
+### Curtis driver classes
+
+Do not interpret numeric Curtis classes without checking the legend or asset metadata. Store a small lookup table in `docs/data_dictionary.md` that records the class number, driver name, source asset, and version used in the analysis.
+
+### Area and denominator assumptions
+
+The R code uses `640000` as the number of source pixels in one 0.2-degree cell. This is an approximation and varies with latitude and projection. In the current workflow it is used as a forest-coverage screening threshold, not as the area conversion for the final country statistics. Country statistics use pixel area directly and are therefore reported in square metres.
+
+### Division by zero and missing values
+
+Before calculating `Rho`, consider masking cells where `Forest[[1]] == 0` or where the denominator is below the analysis threshold. This avoids undefined ratios and makes the screening rule explicit:
+
+```r
+Rho <- mask(Final_loss / Forest[[1]], Forest[[1]] > 0)
+Rho[Rho == 0] <- NA
+```
+
+The exact handling of missing and zero values should be retained in the methods record because it can affect the temporal median and MAD.
+
+## Reproducible execution
+
+1. Open `gee/01_prepare_annual_loss_assets.js` in the Earth Engine Code Editor.
+2. Define `AOItot`, confirm the Hansen and fire asset versions, and start the annual asset exports.
+3. Wait until the asset exports are complete and confirm their band names and footprints.
+4. Update the asset IDs in `gee/02_aggregate_to_20km.js` and export the two GeoTIFFs to Google Drive.
+5. Download the GeoTIFFs into the local `data/raw/` directory.
+6. Run `R/03_detect_extreme_loss.R` in RStudio and inspect the denominator, relative-loss, MAD, and extreme-event maps.
+7. Upload `MASKGEE2025Fires.tif` to Earth Engine and update its project asset ID in `gee/04_country_statistics.js`.
+8. Define the country boundary collection and verify the country-code vectors and threshold vector have identical lengths and ordering.
+9. Run the country-statistics script and retrieve the generated CSV files from Google Drive.
+10. Archive the Earth Engine task configuration, asset IDs, input versions, thresholds, and output checksums.
+
+## Suggested validation checks
+
+- Compare the sum of annual losses before and after each spatial aggregation.
+- Confirm that the annual loss bands are in chronological order.
+- Check that no loss is counted in cells with zero 2000 forest pixels.
+- Compare country totals with a direct 30 m calculation for a small test country.
+- Inspect the effect of the 10% global threshold and the country-specific thresholds.
+- Compare the extreme-event mask with independent fire and windstorm products.
+- Test alternative robust thresholds, such as 2 MAD, 3 MAD, and quantile-based thresholds.
+- Verify that fire exclusion is applied consistently in the first asset-generation stage and in the final attribution stage.
+- Check that `CURTIS.eq(3)` selects the intended driver class.
+- Record whether country geometries are simplified before reduction and quantify any resulting area difference.
+
+## Data dictionary
+
+| Object | Type | Meaning |
+|---|---|---|
+| `treecover2000` | Hansen band | Tree canopy cover in 2000, percent. |
+| `gain` | Hansen band | Forest gain flag for 2000–2012; not updated in later versions. |
+| `lossyear` | Hansen band | Loss-year code 1–25 for 2001–2025. |
+| `forest_threshold` | Parameter | Tree-cover threshold used to define forest. |
+| `Final_loss` | Earth Engine image | Annual aggregated loss bands at the intermediate grid. |
+| `Forest` | Earth Engine image | Aggregated 2000 forest-pixel denominator. |
+| `Rho` | R raster stack | Annual loss as a percentage of the 2000 forest denominator. |
+| `RhoM` | R raster | Temporal median of `Rho` per grid cell. |
+| `Rhomad` | R raster | Temporal MAD of `Rho` per grid cell. |
+| `Rho2` | R raster | Binary extreme-loss mask. |
+| `WIND_TOT` | Earth Engine image | Year-coded extreme-event layer reconstructed from the uploaded mask. |
+| `CURTIS` | Earth Engine image | Curtis forest-loss-driver map. |
+| `pixelArea()` | Earth Engine image | Pixel area used for country-level area totals. |
+
+## Scientific context
+
+The Hansen GFC product is a Landsat-based global forest-change dataset with approximately 30.92 m pixels and annual loss-year coding through 2025 in the current v1.13 release. The product is documented in the Earth Engine Data Catalog and is distributed under CC BY 4.0. The original methodological basis is Hansen et al. (2013).
+
+Curtis et al. (2018) classified dominant drivers of global forest loss, including commodity-driven deforestation, shifting agriculture, forestry, wildfire, and urbanisation. The driver layer in this repository is used as a spatial stratification or filter, not as a substitute for an independent validation of each detected loss event.
+
+The Nature study by Ceccherini et al. (2020) used aggregated satellite-derived forest-loss information to study harvested forest area in Europe, while excluding fire-affected areas and discussing the treatment of major windstorms. This repository extends that general structure with the 2025 Hansen release and a robust time-series procedure for identifying unusually large grid-cell losses.
+
+## Citation
+
+If this workflow contributes to a publication or operational product, cite the repository version, the Hansen dataset, the Curtis driver map, and the methodological papers listed below.
+
+- Ceccherini, G., Duveiller, G., Grassi, G., et al. (2020). Abrupt increase in harvested forest area over Europe after 2015. *Nature*, 583, 72–77. [https://doi.org/10.1038/s41586-020-2438-y](https://doi.org/10.1038/s41586-020-2438-y)
+- Curtis, P. G., Slay, C. M., Harris, N. L., Tyukavina, A., and Hansen, M. C. (2018). Classifying drivers of global forest loss. *Science*, 361, 1108–1111. [https://doi.org/10.1126/science.aau3445](https://doi.org/10.1126/science.aau3445)
+- Hansen, M. C., et al. (2013). High-resolution global maps of 21st-century forest cover change. *Science*, 342, 850–853. [https://doi.org/10.1126/science.1244693](https://doi.org/10.1126/science.1244693)
+
+## License and status
+
+This repository is a documentation and reproducibility scaffold. Before public release, add the project-specific software license, confirm redistribution permissions for all external datasets, and provide versioned copies or stable links for derived assets where permitted.
+
+The workflow is operationally useful but should be reviewed before publication because the supplied scripts contain legacy names, undefined objects, country-specific hard-coded vectors, and at least one apparent cumulative-update error.

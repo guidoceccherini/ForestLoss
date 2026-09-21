@@ -7,12 +7,12 @@ Google Earth Engine and R workflow for producing annual forest-loss layers, aggr
 This repository documents a processing chain developed for the EU Forest Observatory. The workflow combines:
 
 1.  Hansen Global Forest Change data for tree cover and annual forest loss.
-2.  An annual fire-related forest-loss product used to exclude fire-affected pixels from the harvest-oriented layers.
-3.  Google Earth Engine aggregation from approximately 30 m to a nominal 0.02-degree grid (approximately 2 km).
-4.  A second Earth Engine aggregation from the approximately 2 km layers to a 0.2-degree grid (approximately 20 km).
-5.  An R-based robust outlier procedure based on the median and median absolute deviation (MAD).
-6.  A final Earth Engine workflow producing country-level annual statistics for total forest loss, fire-related loss, and extreme-loss events.
-7.  The Curtis et al. forest-loss-driver map for contextual interpretation of disturbance causes.
+2.  The Curtis et al. forest-loss-driver map to filter the analysis specifically for forestry-related drivers.
+3.  An annual fire-related forest-loss product (Tyukavina et al. 2022) used to exclude fire-affected pixels from the harvest-oriented layers.
+4.  Google Earth Engine aggregation from approximately 30 m to a nominal 0.02-degree grid (approximately 2 km).
+5.  A second Earth Engine aggregation from the approximately 2 km layers to a 0.2-degree grid (approximately 20 km).
+6.  An R-based robust outlier procedure based on the median and median absolute deviation (MAD).
+7.  A final Earth Engine workflow producing country-level annual statistics for total forest loss, fire-related loss, and extreme-loss events.
 
 The analysis follows the conceptual approach described in Ceccherini et al. (2020), including spatial aggregation and the separation of abrupt or extreme disturbances from the normal loss signal. The original Nature study and its reproducibility materials are available through Zenodo: [code](https://doi.org/10.5281/zenodo.3687096) and [data](https://doi.org/10.5281/zenodo.3687090).
 
@@ -49,7 +49,7 @@ The script applies the following masks:
 
 -   `treecover2000 >= forest_threshold`, with the default threshold set to 10%.
 -   `gain < 1`, excluding pixels classified as forest gain.
--   Annual fire mask equal to zero, excluding pixels identified by the fire product.
+-   Annual fire mask equal to zero, excluding pixels identified by the Tyukavina et al. (2022) fire product.
 
 For each year, a binary loss layer is produced using `lossyear.eq(year_code)`. The script also constructs a cumulative forest-presence sequence beginning in 2000. These forest-presence layers are intended to represent the initial forest denominator for subsequent aggregation.
 
@@ -69,7 +69,7 @@ Forest2000_at_2km_2025GlobalFires_10
 loss_YYYY_at_2km_2025GlobalFires_10
 ```
 
-Despite the historical variable names `at_2km`, the target projection uses 0.02 degrees. At the equator this is approximately 2.2 km, while the physical north–south and east–west dimensions vary with latitude.
+Despite the variable names `at_2km`, the target projection uses 0.02 degrees. At the equator this is approximately 2.2 km, while the physical north–south and east–west dimensions vary with latitude.
 
 ### 2. Aggregate annual assets to approximately 20 km
 
@@ -86,7 +86,7 @@ The script exports:
 -   `FinalLoss_at_20km_2025Fires.tif`, containing one band per annual loss layer;
 -   `Forest2000_at_20km_2025Fires.tif`, containing the aggregated 2000 forest denominator.
 
-This is a nominal scale corresponding to 0.2 degrees at the equator; it is not a constant metric 20 km grid globally.
+Note that this is a nominal scale corresponding to 0.2 degrees at the equator; it is not a constant metric 20 km grid globally.
 
 The current supplied script loads loss assets from 2004 onward.
 
@@ -121,7 +121,7 @@ Rho > 3 &
 (Forest / 640000) > 0.05
 ```
 
-A cell is classified as an extreme-loss event when its annual relative loss exceeds the temporal median by three MADs, exceeds 3%, and contains more than 5% forest cover according to the approximate source-pixel denominator. The binary mask is written to:
+A cell is classified as an extreme-loss event when its annual relative loss exceeds the temporal median by three MADs, exceeds 3%, and contains more than 5% forest cover according to the source-pixel denominator. The binary mask is written to:
 
 ``` text
 Data2025/MASKGEE2025Fires.tif
@@ -134,6 +134,18 @@ Data2025/ForestHarvest_04_25Fires.tif
 ```
 
 The R-derived mask is then uploaded to Earth Engine as the asset used by the country-statistics script. Please note that the time series starts in 2004.
+
+Why the code divides by a fixed constant of 640,000? The Hansen GFC product is delivered on a fixed angular grid with a native pixel resolution of 0.00025 degree, approximately 30 m at the equator. A 0.2-degree aggregation cell therefore always contains exactly
+
+``` text
+(0.2 / 0.00025) x (0.2 / 0.00025) = 800 x 800 = 640,000
+```
+
+native pixels, on every row of the grid, at every latitude. This is a property of the degree-based grid definition, not an empirical or approximate figure. The pixel count per 0.2-degree cell is exactly 640,000 everywhere on Earth by construction. What genuinely changes with latitude is the physical ground area that each of those 640,000 pixels represents, because a 0.00025-degree pixel spans less east-west distance near the poles than near the equator, following the cosine of latitude, while its north-south extent stays roughly constant.
+
+This shortcut is valid in this script because Forest/640000 is used only to compute a coverage fraction, not an absolute area. Forest is itself a sum of pixel counts produced by the earlier reduceResolution step on the same fixed angular grid, so the numerator and the 640,000 denominator are both counts on that identical grid. Their ratio is a dimensionless fraction that stays internally consistent at every latitude, even though the underlying pixel footprints shrink toward the poles, because the latitude-dependent physical area cancels out of the ratio rather than biasing it. The fraction is then used purely as a screening threshold, (Forest/640000) \> 0.05, to exclude cells with negligible forest presence before the outlier rule is applied, not to report an area in hectares or square kilometres.
+
+The simplification would become a real limitation only if this denominator were repurposed to convert pixel counts into an absolute area estimate, for example hectares of forest loss, because then the shrinking pixel footprint at high latitude would require an explicit cosine-latitude area correction. That is not how it is used here, so no area bias is introduced into the extreme-loss classification.
 
 ### 4. Produce country-level statistics
 
@@ -203,7 +215,7 @@ The supplied variable names use `WIND`, but the R mask is generated from tempora
 
 The Hansen GFC product is a Landsat-based global forest-change dataset with approximately 30 m pixels and annual loss-year coding through 2025 in the current v1.13 release. The product is documented in the Earth Engine Data Catalog and is distributed under CC BY 4.0. The original methodological basis is Hansen et al. (2013).
 
-Curtis et al. (2018) classified dominant drivers of global forest loss, including commodity-driven deforestation, shifting agriculture, forestry, wildfire, and urbanisation. The driver layer in this repository is used as a spatial stratification or filter, not as a substitute for an independent validation of each detected loss event.
+Curtis et al. (2018) classified dominant drivers of global forest loss, including commodity-driven deforestation, shifting agriculture, forestry, wildfire, and urbanisation.
 
 The Nature study by Ceccherini et al. (2020) used aggregated satellite-derived forest-loss information to study harvested forest area in Europe, while excluding fire-affected areas and discussing the treatment of major windstorms. This repository extends that general structure with the 2025 Hansen release and a robust time-series procedure for identifying unusually large grid-cell losses.
 
@@ -212,3 +224,4 @@ The Nature study by Ceccherini et al. (2020) used aggregated satellite-derived f
 -   Ceccherini, G., Duveiller, G., Grassi, G., et al. (2020). Abrupt increase in harvested forest area over Europe after 2015. *Nature*, 583, 72–77. <https://doi.org/10.1038/s41586-020-2438-y>
 -   Curtis, P. G., Slay, C. M., Harris, N. L., Tyukavina, A., and Hansen, M. C. (2018). Classifying drivers of global forest loss. *Science*, 361, 1108–1111. <https://doi.org/10.1126/science.aau3445>
 -   Hansen, M. C., et al. (2013). High-resolution global maps of 21st-century forest cover change. *Science*, 342, 850–853. <https://doi.org/10.1126/science.1244693>
+-   Tyukavina et al. (2022) Global trends of forest loss due to fire, 2001-2019. *Frontiers in Remote Sensing*, <https://doi.org/10.3389/frsen.2022.825190>

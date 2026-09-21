@@ -1,0 +1,564 @@
+% Options for packages loaded elsewhere
+\PassOptionsToPackage{unicode}{hyperref}
+\PassOptionsToPackage{hyphens}{url}
+\documentclass[
+]{article}
+\usepackage{xcolor}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb}
+\setcounter{secnumdepth}{-\maxdimen} % remove section numbering
+\usepackage{iftex}
+\ifPDFTeX
+  \usepackage[T1]{fontenc}
+  \usepackage[utf8]{inputenc}
+  \usepackage{textcomp} % provide euro and other symbols
+\else % if luatex or xetex
+  \usepackage{unicode-math} % this also loads fontspec
+  \defaultfontfeatures{Scale=MatchLowercase}
+  \defaultfontfeatures[\rmfamily]{Ligatures=TeX,Scale=1}
+\fi
+\usepackage{lmodern}
+\ifPDFTeX\else
+  % xetex/luatex font selection
+\fi
+% Use upquote if available, for straight quotes in verbatim environments
+\IfFileExists{upquote.sty}{\usepackage{upquote}}{}
+\IfFileExists{microtype.sty}{% use microtype if available
+  \usepackage[]{microtype}
+  \UseMicrotypeSet[protrusion]{basicmath} % disable protrusion for tt fonts
+}{}
+\makeatletter
+\@ifundefined{KOMAClassName}{% if non-KOMA class
+  \IfFileExists{parskip.sty}{%
+    \usepackage{parskip}
+  }{% else
+    \setlength{\parindent}{0pt}
+    \setlength{\parskip}{6pt plus 2pt minus 1pt}}
+}{% if KOMA class
+  \KOMAoptions{parskip=half}}
+\makeatother
+\usepackage{color}
+\usepackage{fancyvrb}
+\newcommand{\VerbBar}{|}
+\newcommand{\VERB}{\Verb[commandchars=\\\{\}]}
+\DefineVerbatimEnvironment{Highlighting}{Verbatim}{commandchars=\\\{\}}
+% Add ',fontsize=\small' for more characters per line
+\usepackage{framed}
+\definecolor{shadecolor}{RGB}{248,248,248}
+\newenvironment{Shaded}{\begin{snugshade}}{\end{snugshade}}
+\newcommand{\AlertTok}[1]{\textcolor[rgb]{0.94,0.16,0.16}{#1}}
+\newcommand{\AnnotationTok}[1]{\textcolor[rgb]{0.56,0.35,0.01}{\textbf{\textit{#1}}}}
+\newcommand{\AttributeTok}[1]{\textcolor[rgb]{0.13,0.29,0.53}{#1}}
+\newcommand{\BaseNTok}[1]{\textcolor[rgb]{0.00,0.00,0.81}{#1}}
+\newcommand{\BuiltInTok}[1]{#1}
+\newcommand{\CharTok}[1]{\textcolor[rgb]{0.31,0.60,0.02}{#1}}
+\newcommand{\CommentTok}[1]{\textcolor[rgb]{0.56,0.35,0.01}{\textit{#1}}}
+\newcommand{\CommentVarTok}[1]{\textcolor[rgb]{0.56,0.35,0.01}{\textbf{\textit{#1}}}}
+\newcommand{\ConstantTok}[1]{\textcolor[rgb]{0.56,0.35,0.01}{#1}}
+\newcommand{\ControlFlowTok}[1]{\textcolor[rgb]{0.13,0.29,0.53}{\textbf{#1}}}
+\newcommand{\DataTypeTok}[1]{\textcolor[rgb]{0.13,0.29,0.53}{#1}}
+\newcommand{\DecValTok}[1]{\textcolor[rgb]{0.00,0.00,0.81}{#1}}
+\newcommand{\DocumentationTok}[1]{\textcolor[rgb]{0.56,0.35,0.01}{\textbf{\textit{#1}}}}
+\newcommand{\ErrorTok}[1]{\textcolor[rgb]{0.64,0.00,0.00}{\textbf{#1}}}
+\newcommand{\ExtensionTok}[1]{#1}
+\newcommand{\FloatTok}[1]{\textcolor[rgb]{0.00,0.00,0.81}{#1}}
+\newcommand{\FunctionTok}[1]{\textcolor[rgb]{0.13,0.29,0.53}{\textbf{#1}}}
+\newcommand{\ImportTok}[1]{#1}
+\newcommand{\InformationTok}[1]{\textcolor[rgb]{0.56,0.35,0.01}{\textbf{\textit{#1}}}}
+\newcommand{\KeywordTok}[1]{\textcolor[rgb]{0.13,0.29,0.53}{\textbf{#1}}}
+\newcommand{\NormalTok}[1]{#1}
+\newcommand{\OperatorTok}[1]{\textcolor[rgb]{0.81,0.36,0.00}{\textbf{#1}}}
+\newcommand{\OtherTok}[1]{\textcolor[rgb]{0.56,0.35,0.01}{#1}}
+\newcommand{\PreprocessorTok}[1]{\textcolor[rgb]{0.56,0.35,0.01}{\textit{#1}}}
+\newcommand{\RegionMarkerTok}[1]{#1}
+\newcommand{\SpecialCharTok}[1]{\textcolor[rgb]{0.81,0.36,0.00}{\textbf{#1}}}
+\newcommand{\SpecialStringTok}[1]{\textcolor[rgb]{0.31,0.60,0.02}{#1}}
+\newcommand{\StringTok}[1]{\textcolor[rgb]{0.31,0.60,0.02}{#1}}
+\newcommand{\VariableTok}[1]{\textcolor[rgb]{0.00,0.00,0.00}{#1}}
+\newcommand{\VerbatimStringTok}[1]{\textcolor[rgb]{0.31,0.60,0.02}{#1}}
+\newcommand{\WarningTok}[1]{\textcolor[rgb]{0.56,0.35,0.01}{\textbf{\textit{#1}}}}
+\usepackage{longtable,booktabs,array}
+\usepackage{calc} % for calculating minipage widths
+% Correct order of tables after \paragraph or \subparagraph
+\usepackage{etoolbox}
+\makeatletter
+\patchcmd\longtable{\par}{\if@noskipsec\mbox{}\fi\par}{}{}
+\makeatother
+% Allow footnotes in longtable head/foot
+\IfFileExists{footnotehyper.sty}{\usepackage{footnotehyper}}{\usepackage{footnote}}
+\makesavenoteenv{longtable}
+\usepackage{graphicx}
+\makeatletter
+\newsavebox\pandoc@box
+\newcommand*\pandocbounded[1]{% scales image to fit in text height/width
+  \sbox\pandoc@box{#1}%
+  \Gscale@div\@tempa{\textheight}{\dimexpr\ht\pandoc@box+\dp\pandoc@box\relax}%
+  \Gscale@div\@tempb{\linewidth}{\wd\pandoc@box}%
+  \ifdim\@tempb\p@<\@tempa\p@\let\@tempa\@tempb\fi% select the smaller of both
+  \ifdim\@tempa\p@<\p@\scalebox{\@tempa}{\usebox\pandoc@box}%
+  \else\usebox{\pandoc@box}%
+  \fi%
+}
+% Set default figure placement to htbp
+\def\fps@figure{htbp}
+\makeatother
+\setlength{\emergencystretch}{3em} % prevent overfull lines
+\providecommand{\tightlist}{%
+  \setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
+\usepackage{bookmark}
+\IfFileExists{xurl.sty}{\usepackage{xurl}}{} % add URL line breaks if available
+\urlstyle{same}
+\hypersetup{
+  hidelinks,
+  pdfcreator={LaTeX via pandoc}}
+
+\author{}
+\date{\vspace{-2.5em}}
+
+\begin{document}
+
+\section{EU Forest Observatory: Forest Loss
+Monitoring}\label{eu-forest-observatory-forest-loss-monitoring}
+
+Google Earth Engine and R workflow for producing annual forest-loss
+layers, aggregating them to a 0.2-degree grid, detecting extreme loss
+events, and generating country-level statistics by disturbance type.
+
+\subsection{Overview}\label{overview}
+
+This repository documents a processing chain developed for the EU Forest
+Observatory. The workflow combines:
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\tightlist
+\item
+  Hansen Global Forest Change data for tree cover and annual forest
+  loss.
+\item
+  An annual fire-related forest-loss product used to exclude
+  fire-affected pixels from the harvest-oriented layers.
+\item
+  Google Earth Engine aggregation from approximately 30 m to a nominal
+  0.02-degree grid (approximately 2 km).
+\item
+  A second Earth Engine aggregation from the approximately 2 km layers
+  to a 0.2-degree grid (approximately 20 km).
+\item
+  An R-based robust outlier procedure based on the median and median
+  absolute deviation (MAD).
+\item
+  A final Earth Engine workflow producing country-level annual
+  statistics for total forest loss, fire-related loss, and extreme-loss
+  events.
+\item
+  The Curtis et al.~forest-loss-driver map for contextual interpretation
+  of disturbance causes.
+\end{enumerate}
+
+The analysis follows the conceptual approach described in Ceccherini et
+al.~(2020), including spatial aggregation and the separation of abrupt
+or extreme disturbances from the normal loss signal. The original Nature
+study and its reproducibility materials are available through Zenodo:
+\href{https://doi.org/10.5281/zenodo.3687096}{code} and
+\href{https://doi.org/10.5281/zenodo.3687090}{data}.
+
+\subsection{Repository structure}\label{repository-structure}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{.}
+\NormalTok{├── README.md}
+\NormalTok{├── gee/}
+\NormalTok{│   ├── 01\_prepare\_annual\_loss\_assets.js}
+\NormalTok{│   ├── 02\_aggregate\_to\_20km.js}
+\NormalTok{│   └── 04\_country\_statistics.js}
+\NormalTok{├── R/}
+\NormalTok{│   └── 03\_detect\_extreme\_loss.R}
+\NormalTok{├── data/}
+\NormalTok{│   ├── raw/                 \# Local GeoTIFFs downloaded from Earth Engine}
+\NormalTok{│   ├── intermediate/        \# R{-}derived rasters and intermediate products}
+\NormalTok{│   └── README.md}
+\NormalTok{├── docs/}
+\NormalTok{│   ├── workflow.md}
+\NormalTok{│   └── data\_dictionary.md}
+\NormalTok{└── CITATION.cff}
+\end{Highlighting}
+\end{Shaded}
+
+The code supplied for this documentation should be split into the files
+above. Asset IDs, Drive folders, regions, country lists, and local paths
+must be adapted to the execution account and project.
+
+\subsection{Workflow}\label{workflow}
+
+\subsubsection{1. Prepare annual loss
+assets}\label{prepare-annual-loss-assets}
+
+\texttt{gee/01\_prepare\_annual\_loss\_assets.js} loads:
+
+\begin{itemize}
+\tightlist
+\item
+  \texttt{UMD/hansen/global\_forest\_change\_2025\_v1\_13};
+\item
+  \texttt{users/sashatyu/2001-2025\_fire\_forest\_loss\_annual};
+\item
+  an analysis region, currently represented by \texttt{AOItot} in the
+  script.
+\end{itemize}
+
+The Hansen product is a 30 m Landsat-derived dataset covering
+2000--2025. Its \texttt{treecover2000} band represents canopy cover in
+2000, while \texttt{lossyear} encodes loss years as 1--25 for
+2001--2025. The official Earth Engine catalogue documents the product
+and its bands at
+\href{https://developers.google.com/earth-engine/datasets/catalog/UMD_hansen_global_forest_change_2025_v1_13}{Hansen
+Global Forest Change v1.13}.
+
+The script applies the following masks:
+
+\begin{itemize}
+\tightlist
+\item
+  \texttt{treecover2000\ \textgreater{}=\ forest\_threshold}, with the
+  default threshold set to 10\%.
+\item
+  \texttt{gain\ \textless{}\ 1}, excluding pixels classified as forest
+  gain.
+\item
+  Annual fire mask equal to zero, excluding pixels identified by the
+  fire product.
+\end{itemize}
+
+For each year, a binary loss layer is produced using
+\texttt{lossyear.eq(year\_code)}. The script also constructs a
+cumulative forest-presence sequence beginning in 2000. These
+forest-presence layers are intended to represent the initial forest
+denominator for subsequent aggregation.
+
+Each binary annual loss layer and the 2000 forest layer is aggregated
+with:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\OperatorTok{.}\FunctionTok{reduceResolution}\NormalTok{(ee}\OperatorTok{.}\AttributeTok{Reducer}\OperatorTok{.}\FunctionTok{sum}\NormalTok{()}\OperatorTok{.}\FunctionTok{unweighted}\NormalTok{()}\OperatorTok{,} \KeywordTok{false}\OperatorTok{,} \DecValTok{65536}\NormalTok{)}
+\OperatorTok{.}\FunctionTok{reproject}\NormalTok{(ee}\OperatorTok{.}\FunctionTok{Projection}\NormalTok{(}\StringTok{\textquotesingle{}EPSG:4326\textquotesingle{}}\NormalTok{)}\OperatorTok{.}\FunctionTok{scale}\NormalTok{(}\FloatTok{0.02}\OperatorTok{,} \FloatTok{0.02}\NormalTok{))}
+\end{Highlighting}
+\end{Shaded}
+
+The resulting values are sums of source pixels within the target grid
+cell. They should therefore be interpreted as counts of approximately 30
+m pixels, not directly as hectares or percentages.
+
+The script exports one Earth Engine asset per year and one 2000
+forest-denominator asset. The export names follow this pattern:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{Forest2000\_at\_2km\_2025GlobalFires\_10}
+\NormalTok{loss\_YYYY\_at\_2km\_2025GlobalFires\_10}
+\end{Highlighting}
+\end{Shaded}
+
+Despite the historical variable names \texttt{at\_2km}, the target
+projection uses 0.02 degrees. At the equator this is approximately 2.2
+km, while the physical north--south and east--west dimensions vary with
+latitude.
+
+\subsubsection{2. Aggregate annual assets to approximately 20
+km}\label{aggregate-annual-assets-to-approximately-20-km}
+
+\texttt{gee/02\_aggregate\_to\_20km.js} loads the annual approximately 2
+km loss assets, stacks them into \texttt{Final\_loss}, and applies a
+second sum aggregation to a 0.2-degree grid:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{Final\_loss}
+  \OperatorTok{.}\FunctionTok{reduceResolution}\NormalTok{(ee}\OperatorTok{.}\AttributeTok{Reducer}\OperatorTok{.}\FunctionTok{sum}\NormalTok{()}\OperatorTok{.}\FunctionTok{unweighted}\NormalTok{()}\OperatorTok{,} \KeywordTok{false}\OperatorTok{,} \DecValTok{65536}\NormalTok{)}
+  \OperatorTok{.}\FunctionTok{reproject}\NormalTok{(ee}\OperatorTok{.}\FunctionTok{Projection}\NormalTok{(}\StringTok{\textquotesingle{}EPSG:4326\textquotesingle{}}\NormalTok{)}\OperatorTok{.}\FunctionTok{scale}\NormalTok{(}\FloatTok{0.2}\OperatorTok{,} \FloatTok{0.2}\NormalTok{))}
+\end{Highlighting}
+\end{Shaded}
+
+The script exports:
+
+\begin{itemize}
+\tightlist
+\item
+  \texttt{FinalLoss\_at\_20km\_2025Fires.tif}, containing one band per
+  annual loss layer;
+\item
+  \texttt{Forest2000\_at\_20km\_2025Fires.tif}, containing the
+  aggregated 2000 forest denominator.
+\end{itemize}
+
+This is a nominal scale corresponding to 0.2 degrees at the equator; it
+is not a constant metric 20 km grid globally.
+
+The current supplied script loads loss assets from 2004 onward.
+
+\subsubsection{3. Detect extreme loss events in
+R}\label{detect-extreme-loss-events-in-r}
+
+\texttt{R/03\_detect\_extreme\_loss.R} reads the two 0.2-degree GeoTIFFs
+with the \texttt{raster} package:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{Final\_loss }\OtherTok{\textless{}{-}} \FunctionTok{stack}\NormalTok{(}\StringTok{"Data2025/FinalLoss\_at\_20km\_2025Fires.tif"}\NormalTok{)}
+\NormalTok{Forest }\OtherTok{\textless{}{-}} \FunctionTok{stack}\NormalTok{(}\StringTok{"Data2025/Forest2000\_at\_20km\_2025Fires.tif"}\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+The script first calculates the annual loss percentage relative to the
+2000 forest-pixel denominator:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{Rho }\OtherTok{\textless{}{-}}\NormalTok{ (Final\_loss }\SpecialCharTok{/}\NormalTok{ Forest[[}\DecValTok{1}\NormalTok{]]) }\SpecialCharTok{*} \DecValTok{100}
+\NormalTok{Rho[Rho }\SpecialCharTok{==} \DecValTok{0}\NormalTok{] }\OtherTok{\textless{}{-}} \ConstantTok{NA}
+\end{Highlighting}
+\end{Shaded}
+
+It then calculates cell-wise temporal summary statistics:
+
+\begin{itemize}
+\tightlist
+\item
+  median;
+\item
+  mean;
+\item
+  MAD;
+\item
+  standard deviation.
+\end{itemize}
+
+The classification rule is:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{Rho }\SpecialCharTok{\textgreater{}}\NormalTok{ RhoM }\SpecialCharTok{+} \DecValTok{3} \SpecialCharTok{*}\NormalTok{ Rhomad }\SpecialCharTok{\&}
+\NormalTok{Rho }\SpecialCharTok{\textgreater{}} \DecValTok{3} \SpecialCharTok{\&}
+\NormalTok{(Forest }\SpecialCharTok{/} \DecValTok{640000}\NormalTok{) }\SpecialCharTok{\textgreater{}} \FloatTok{0.05}
+\end{Highlighting}
+\end{Shaded}
+
+A cell is classified as an extreme-loss event when its annual relative
+loss exceeds the temporal median by three MADs, exceeds 3\%, and
+contains more than 5\% forest cover according to the approximate
+source-pixel denominator. The binary mask is written to:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{Data2025/MASKGEE2025Fires.tif}
+\end{Highlighting}
+\end{Shaded}
+
+The continuous relative-loss time series is written to:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{Data2025/ForestHarvest\_04\_25Fires.tif}
+\end{Highlighting}
+\end{Shaded}
+
+The R-derived mask is then uploaded to Earth Engine as the asset used by
+the country-statistics script. Please note that the time series starts
+in 2004.
+
+\subsubsection{4. Produce country-level
+statistics}\label{produce-country-level-statistics}
+
+\texttt{gee/04\_country\_statistics.js} combines:
+
+\begin{itemize}
+\tightlist
+\item
+  the R-derived extreme-event mask;
+\item
+  the Curtis driver map;
+\item
+  the Hansen tree-cover and loss bands;
+\item
+  annual fire-loss layers;
+\item
+  country boundaries;
+\item
+  country-specific tree-cover thresholds.
+\end{itemize}
+
+The Curtis layer is loaded as:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{ee}\OperatorTok{.}\FunctionTok{Image}\NormalTok{(}\StringTok{"projects/tmf{-}monitoring/assets/CurtisDrivers2018/FilledMap"}\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+The code restricts the Hansen analysis to \texttt{CURTIS.eq(3)}, which
+refers to ``forestry''. The script then builds a year-coded
+extreme-event image from the multiband R mask. Bands \texttt{b8} through
+\texttt{b22} are mapped to years 2011--2025 using the values 11--25.
+
+For each country, the script applies the corresponding country-specific
+threshold from \texttt{list\_t}. It then calculates annual area
+statistics at 30 m using pixel area and grouped reducers.
+
+Three CSV outputs are produced:
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\tightlist
+\item
+  \texttt{Country\_Forest\_Change\_EUOBS\_\textless{}country\textgreater{}.csv}
+  --- all forest loss by loss year.
+\item
+  \texttt{Country\_Forest\_Change\_EUOBS\_fires\textless{}country\textgreater{}.csv}
+  --- fire-related loss, excluding cells classified as extreme events by
+  the wind/extreme mask.
+\item
+  \texttt{Country\_Forest\_Change\_EUOBS\_Wind\textless{}country\textgreater{}.csv}
+  --- loss in cells classified as extreme events (i.e.~Wind and other
+  extreme events).
+\end{enumerate}
+
+The grouped reducer converts the \texttt{lossyear} or annual
+fire/extreme-event code into wide columns such as \texttt{sum\_1},
+\texttt{sum\_2}, and so forth. The values are areas in square metres
+because loss pixels are multiplied by \texttt{ee.Image.pixelArea()}.
+
+\subsubsection{Fire and extreme-event
+terminology}\label{fire-and-extreme-event-terminology}
+
+The supplied variable names use \texttt{WIND}, but the R mask is
+generated from temporal outliers in the aggregated loss series. It
+should therefore be called an \texttt{extreme\_loss} or
+\texttt{abrupt\_loss} mask unless it has been independently validated as
+wind damage. If the mask is specifically intended to represent
+windstorms, document the external windstorm layer, temporal coverage,
+and exclusion rule.
+
+\subsection{Reproducible execution}\label{reproducible-execution}
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\tightlist
+\item
+  Open \texttt{gee/01\_prepare\_annual\_loss\_assets.js} in the Earth
+  Engine Code Editor.
+\item
+  Define \texttt{AOItot}, confirm the Hansen and fire asset versions,
+  and start the annual asset exports.
+\item
+  Wait until the asset exports are complete and confirm their band names
+  and footprints.
+\item
+  Update the asset IDs in \texttt{gee/02\_aggregate\_to\_20km.js} and
+  export the two GeoTIFFs to Google Drive.
+\item
+  Download the GeoTIFFs into the local \texttt{data/raw/} directory.
+\item
+  Run \texttt{R/03\_detect\_extreme\_loss.R} in RStudio and inspect the
+  denominator, relative-loss, MAD, and extreme-event maps.
+\item
+  Upload \texttt{MASKGEE2025Fires.tif} to Earth Engine and update its
+  project asset ID in \texttt{gee/04\_country\_statistics.js}.
+\item
+  Define the country boundary collection and verify the country-code
+  vectors and threshold vector have identical lengths and ordering.
+\item
+  Run the country-statistics script and retrieve the generated CSV files
+  from Google Drive.
+\item
+  Archive the Earth Engine task configuration, asset IDs, input
+  versions, thresholds, and output checksums.
+\end{enumerate}
+
+\subsection{Data dictionary}\label{data-dictionary}
+
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.3333}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.3333}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.3333}}@{}}
+\toprule\noalign{}
+\begin{minipage}[b]{\linewidth}\raggedright
+Object
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Type
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Meaning
+\end{minipage} \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+\texttt{treecover2000} & Hansen band & Tree canopy cover in 2000,
+percent. \\
+\texttt{gain} & Hansen band & Forest gain flag for 2000--2012; not
+updated in later versions. \\
+\texttt{lossyear} & Hansen band & Loss-year code 1--25 for
+2001--2025. \\
+\texttt{forest\_threshold} & Parameter & Tree-cover threshold used to
+define forest. \\
+\texttt{Final\_loss} & Earth Engine image & Annual aggregated loss bands
+at the intermediate grid. \\
+\texttt{Forest} & Earth Engine image & Aggregated 2000 forest-pixel
+denominator. \\
+\texttt{Rho} & R raster stack & Annual loss as a percentage of the 2000
+forest denominator. \\
+\texttt{RhoM} & R raster & Temporal median of \texttt{Rho} per grid
+cell. \\
+\texttt{Rhomad} & R raster & Temporal MAD of \texttt{Rho} per grid
+cell. \\
+\texttt{Rho2} & R raster & Binary extreme-loss mask. \\
+\texttt{WIND\_TOT} & Earth Engine image & Year-coded extreme-event layer
+reconstructed from the uploaded mask. \\
+\texttt{CURTIS} & Earth Engine image & Curtis forest-loss-driver map. \\
+\texttt{pixelArea()} & Earth Engine image & Pixel area used for
+country-level area totals. \\
+\end{longtable}
+
+\subsection{Scientific context}\label{scientific-context}
+
+The Hansen GFC product is a Landsat-based global forest-change dataset
+with approximately 30 m pixels and annual loss-year coding through 2025
+in the current v1.13 release. The product is documented in the Earth
+Engine Data Catalog and is distributed under CC BY 4.0. The original
+methodological basis is Hansen et al.~(2013).
+
+Curtis et al.~(2018) classified dominant drivers of global forest loss,
+including commodity-driven deforestation, shifting agriculture,
+forestry, wildfire, and urbanisation. The driver layer in this
+repository is used as a spatial stratification or filter, not as a
+substitute for an independent validation of each detected loss event.
+
+The Nature study by Ceccherini et al.~(2020) used aggregated
+satellite-derived forest-loss information to study harvested forest area
+in Europe, while excluding fire-affected areas and discussing the
+treatment of major windstorms. This repository extends that general
+structure with the 2025 Hansen release and a robust time-series
+procedure for identifying unusually large grid-cell losses.
+
+\subsection{Citation}\label{citation}
+
+\begin{itemize}
+\tightlist
+\item
+  Ceccherini, G., Duveiller, G., Grassi, G., et al.~(2020). Abrupt
+  increase in harvested forest area over Europe after 2015.
+  \emph{Nature}, 583, 72--77.
+  \url{https://doi.org/10.1038/s41586-020-2438-y}
+\item
+  Curtis, P. G., Slay, C. M., Harris, N. L., Tyukavina, A., and Hansen,
+  M. C. (2018). Classifying drivers of global forest loss.
+  \emph{Science}, 361, 1108--1111.
+  \url{https://doi.org/10.1126/science.aau3445}
+\item
+  Hansen, M. C., et al.~(2013). High-resolution global maps of
+  21st-century forest cover change. \emph{Science}, 342, 850--853.
+  \url{https://doi.org/10.1126/science.1244693}
+\end{itemize}
+
+\end{document}

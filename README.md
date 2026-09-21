@@ -9,9 +9,9 @@ This repository documents a processing chain developed for the EU Forest Observa
 1.  Hansen Global Forest Change data (Hansen et al. 2013) for tree cover and annual forest loss.
 2.  The Curtis (Curtis et al. 2018) forest-loss-driver map to filter the analysis specifically for forestry-related drivers.
 3.  An annual fire-related forest-loss product (Tyukavina et al. 2022) used to exclude fire-affected pixels from the harvest-oriented layers.
-4.  Google Earth Engine aggregation from approximately 30 m to a nominal 0.02-degree grid (approximately 2 km).
+4.  A first Google Earth Engine aggregation from approximately 30 m to a nominal 0.02-degree grid (approximately 2 km).
 5.  A second Earth Engine aggregation from the approximately 2 km layers to a 0.2-degree grid (approximately 20 km).
-6.  An R-based robust outlier procedure based on the median and median absolute deviation (MAD).
+6.  An R-based robust outlier procedure, applied to the 0.2-degree forest and loss rasters produced in step 5, that uses the median and median absolute deviation (MAD) of each grid cell's relative loss time series to flag years of anomalously high forest loss as extreme-loss events.
 7.  A final Earth Engine workflow producing country-level annual statistics for total forest loss, fire-related loss, and extreme-loss events.
 
 The analysis follows the conceptual approach described in Ceccherini et al. (2020), including spatial aggregation and the separation of abrupt or extreme disturbances from the normal loss signal. The original Nature study and its reproducibility materials are available through Zenodo: [code](https://doi.org/10.5281/zenodo.3687096) and [data](https://doi.org/10.5281/zenodo.3687090).
@@ -31,8 +31,6 @@ The analysis follows the conceptual approach described in Ceccherini et al. (202
 │   ├── raw/                 # Local GeoTIFFs downloaded from Earth Engine
 │   └── intermediate/        # R-derived rasters and intermediate products
 ```
-
-The code supplied for this documentation should be split into the files above. Asset IDs, Drive folders, regions, country lists, and local paths must be adapted to the execution account and project.
 
 ## Workflow
 
@@ -143,9 +141,9 @@ Why the code divides by a fixed constant of 640,000? The Hansen GFC product is d
 (0.2 / 0.00025) x (0.2 / 0.00025) = 800 x 800 = 640,000
 ```
 
-native pixels, on every row of the grid, at every latitude. This is a property of the degree-based grid definition, not an empirical or approximate figure. The pixel count per 0.2-degree cell is exactly 640,000 everywhere on Earth by construction. What genuinely changes with latitude is the physical ground area that each of those 640,000 pixels represents, because a 0.00025-degree pixel spans less east-west distance near the poles than near the equator, following the cosine of latitude, while its north-south extent stays roughly constant.
+native pixels, on every row of the grid, at every latitude. This is a property of the degree-based grid definition, not an empirical or approximate figure. The pixel count per 0.2-degree cell is exactly 640,000 everywhere on Earth by construction.
 
-This shortcut is valid in this script because Forest/640000 is used only to compute a coverage fraction, not an absolute area. Forest is itself a sum of pixel counts produced by the earlier reduceResolution step on the same fixed angular grid, so the numerator and the 640,000 denominator are both counts on that identical grid. Their ratio is a dimensionless fraction that stays internally consistent at every latitude, even though the underlying pixel footprints shrink toward the poles, because the latitude-dependent physical area cancels out of the ratio rather than biasing it. The fraction is then used purely as a screening threshold, (Forest/640000) \> 0.05, to exclude cells with negligible forest presence before the outlier rule is applied, not to report an area in hectares or square kilometres.
+This shortcut is valid in this script because Forest/640000 is used only to compute a coverage fraction, not an absolute area.
 
 The simplification would become a real limitation only if this denominator were repurposed to convert pixel counts into an absolute area estimate, for example hectares of forest loss, because then the shrinking pixel footprint at high latitude would require an explicit cosine-latitude area correction. That is not how it is used here, so no area bias is introduced into the extreme-loss classification.
 
@@ -168,6 +166,8 @@ ee.Image("projects/tmf-monitoring/assets/CurtisDrivers2018/FilledMap")
 
 The code restricts the analysis to `CURTIS.eq(3)`, which refers to "forestry" forest loss driver. The script then builds a year-coded extreme-event image from the multiband R mask. Bands `b8` through `b22` are mapped to years 2011–2025 using the values 11–25.
 
+It then calculates annual area statistics at 30 m using pixel area and grouped reducers.
+
 Three CSV outputs are produced:
 
 1.  `Country_Forest_Change_EUOBS_<country>.csv` — all forest loss by loss year.
@@ -180,32 +180,24 @@ For each country, the script applies the corresponding country-specific threshol
 
 This calibration procedure (again, not shown here, see Ceccherini et al. 2020) works as follows:
 
-- For each country, the Hansen treecover2000 layer is thresholded at a series of candidate tree-cover percentages, stepped in increments of 5% (for example 10%, 15%, 20%, and so on).
+-   For each country, the Hansen treecover2000 layer is thresholded at a series of candidate tree-cover percentages, stepped in increments of 5% (for example 10%, 15%, 20%, and so on).
 
-- At each candidate threshold, the total forest area implied by Hansen is computed for that country.
+-   At each candidate threshold, the total forest area implied by Hansen is computed for that country.
 
-- This Hansen-derived forest area is compared against the corresponding national forest area reported by FAO's Forest Resource Assessment (FRA), obtained through FAOSTAT, for the closest matching reference year.
+-   This Hansen-derived forest area is compared against the corresponding national forest area reported by FAO's Forest Resource Assessment (FRA), obtained through FAOSTAT, for the closest matching reference year.
 
-- The threshold that minimises the discrepancy between the Hansen-derived forest area and the FAO/FRA benchmark is selected as that country's calibrated tree-cover threshold.
-
-It then calculates annual area statistics at 30 m using pixel area and grouped reducers.
-
-### Fire and extreme-event terminology
-
-The supplied variable names use `WIND`, but the R mask is generated from temporal outliers in the aggregated loss series. It should therefore be called an `extreme_loss` or `abrupt_loss` mask unless it has been independently validated as wind damage. If the mask is specifically intended to represent windstorms, document the external windstorm layer, temporal coverage, and exclusion rule.
+-   The threshold that minimises the discrepancy between the Hansen-derived forest area and the FAO/FRA benchmark is selected as that country's calibrated tree-cover threshold.
 
 ## Reproducible execution
 
 1.  Open `gee/01_prepare_annual_loss_assets.js` in the Earth Engine Code Editor.
-2.  Confirm the Hansen and fire asset versions, and start the annual asset exports.
-3.  Wait until the asset exports are complete and confirm their band names and footprints.
+2.  Confirm the Hansen and fire asset versions (there are annual updates), and start the annual asset exports.
+3.  Wait until the asset exports are complete.
 4.  Update the asset IDs in `gee/02_aggregate_to_20km.js` and export the two GeoTIFFs to Google Drive.
 5.  Download the GeoTIFFs into the local `data/raw/` directory.
 6.  Run `R/03_detect_extreme_loss.R` in RStudio and inspect the denominator, relative-loss, MAD, and extreme-event maps.
 7.  Upload `MASKGEE2025Fires.tif` to Earth Engine and update its project asset ID in `gee/04_country_statistics.js`.
-8.  Define the country boundary collection and verify the country-code vectors and threshold vector have identical lengths and ordering.
-9.  Run the country-statistics script and retrieve the generated CSV files from Google Drive.
-10. Archive the Earth Engine task configuration, asset IDs, input versions, thresholds, and output checksums.
+8.  Run the country-statistics script and retrieve the generated CSV files from Google Drive.
 
 ## Data dictionary
 

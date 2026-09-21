@@ -6,8 +6,8 @@ Google Earth Engine and R workflow for producing annual forest-loss layers, aggr
 
 This repository documents a processing chain developed for the EU Forest Observatory. The workflow combines:
 
-1.  Hansen Global Forest Change data for tree cover and annual forest loss.
-2.  The Curtis et al. forest-loss-driver map to filter the analysis specifically for forestry-related drivers.
+1.  Hansen Global Forest Change data (Hansen et al. 2013) for tree cover and annual forest loss.
+2.  The Curtis (Curtis et al. 2018) forest-loss-driver map to filter the analysis specifically for forestry-related drivers.
 3.  An annual fire-related forest-loss product (Tyukavina et al. 2022) used to exclude fire-affected pixels from the harvest-oriented layers.
 4.  Google Earth Engine aggregation from approximately 30 m to a nominal 0.02-degree grid (approximately 2 km).
 5.  A second Earth Engine aggregation from the approximately 2 km layers to a 0.2-degree grid (approximately 20 km).
@@ -43,7 +43,9 @@ The code supplied for this documentation should be split into the files above. A
 -   `UMD/hansen/global_forest_change_2025_v1_13`;
 -   `users/sashatyu/2001-2025_fire_forest_loss_annual`;
 
-AOItot (Total Area of Interest): This variable defines a massive, near-global bounding polygon using geographic WGS84 coordinates. It spans almost the entire globe horizontally—stretching from approximately 167.76°W to 178.52°E in longitude—and vertically covers latitudes from about 54.77°S to 73.70°N. This extensive boundary serves as the macro-scale analysis region for the script (encompassing most global landmasses while excluding only the extreme polar caps). The Hansen product is a 30 m Landsat-derived dataset covering 2000–2025. Its `treecover2000` band represents canopy cover in 2000, while `lossyear` encodes loss years as 1–25 for 2001–2025. The official Earth Engine catalogue documents the product and its bands at [Hansen Global Forest Change v1.13](https://developers.google.com/earth-engine/datasets/catalog/UMD_hansen_global_forest_change_2025_v1_13).
+AOItot (Total Area of Interest): This variable defines a massive, near-global bounding polygon using geographic WGS84 coordinates. It spans almost the entire globe excluding only the extreme polar caps.
+
+The Hansen product is a 30 m Landsat-derived dataset covering 2000–2025. Its `treecover2000` band represents canopy cover in 2000, while `lossyear` encodes loss years as 1–25 for 2001–2025. The official Earth Engine catalogue documents the product and its bands at [Hansen Global Forest Change v1.13](https://developers.google.com/earth-engine/datasets/catalog/UMD_hansen_global_forest_change_2025_v1_13).
 
 The script applies the following masks:
 
@@ -164,9 +166,7 @@ The Curtis layer is loaded as:
 ee.Image("projects/tmf-monitoring/assets/CurtisDrivers2018/FilledMap")
 ```
 
-The code restricts the Hansen analysis to `CURTIS.eq(3)`, which refers to "forestry". The script then builds a year-coded extreme-event image from the multiband R mask. Bands `b8` through `b22` are mapped to years 2011–2025 using the values 11–25.
-
-For each country, the script applies the corresponding country-specific threshold from `list_t`. It then calculates annual area statistics at 30 m using pixel area and grouped reducers.
+The code restricts the analysis to `CURTIS.eq(3)`, which refers to "forestry" forest loss driver. The script then builds a year-coded extreme-event image from the multiband R mask. Bands `b8` through `b22` are mapped to years 2011–2025 using the values 11–25.
 
 Three CSV outputs are produced:
 
@@ -175,6 +175,20 @@ Three CSV outputs are produced:
 3.  `Country_Forest_Change_EUOBS_Wind<country>.csv` — loss in cells classified as extreme events (i.e. Wind and other extreme events).
 
 The grouped reducer converts the `lossyear` or annual fire/extreme-event code into wide columns such as `sum_1`, `sum_2`, and so forth. The values are areas in square metres because loss pixels are multiplied by `ee.Image.pixelArea()`.
+
+For each country, the script applies the corresponding country-specific threshold from `list_t`. Each country is assigned its own tree-cover percentage threshold in list_t, rather than the single global 10% threshold used in the first script. These per-country values are not arbitrary: they follow a calibration method (not shown here) introduced in Ceccherini et al. (2020) to reconcile the Hansen tree-cover product with official national forest statistics.
+
+This calibration procedure (again, not shown here, see Ceccherini et al. 2020) works as follows:
+
+- For each country, the Hansen treecover2000 layer is thresholded at a series of candidate tree-cover percentages, stepped in increments of 5% (for example 10%, 15%, 20%, and so on).
+
+- At each candidate threshold, the total forest area implied by Hansen is computed for that country.
+
+- This Hansen-derived forest area is compared against the corresponding national forest area reported by FAO's Forest Resource Assessment (FRA), obtained through FAOSTAT, for the closest matching reference year.
+
+- The threshold that minimises the discrepancy between the Hansen-derived forest area and the FAO/FRA benchmark is selected as that country's calibrated tree-cover threshold.
+
+It then calculates annual area statistics at 30 m using pixel area and grouped reducers.
 
 ### Fire and extreme-event terminology
 

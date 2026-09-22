@@ -1,7 +1,7 @@
 ---
 output:
-  html_document: default
   pdf_document: default
+  html_document: default
 ---
 
 # EU Forest Observatory: Forest Loss Monitoring
@@ -10,9 +10,7 @@ Google Earth Engine and R workflow for producing annual forest-loss layers, aggr
 
 ## Overview
 
-This repository documents a processing chain developed for the EU Forest Observatory. It combines satellite-derived forest-change products, driver information, robust time-series analysis, and country-level aggregation.
-
-The workflow consists of:
+This repository documents a research workflow developed in the context of activities related to the EU Forest Observatory. It provides practical scripts for processing satellite-derived forest-loss data, identifying unusually large loss events, and producing country-level summary statistics and plots. The material is intended to support analysis and reproducibility; it should not be interpreted as an official EU Forest Observatory product or as a formally endorsed operational methodology. The workflow consists of:
 
 1.  Hansen Global Forest Change data for tree cover and annual forest loss.
 2.  The Curtis et al. forest-loss-driver map to restrict the analysis to forestry-related loss.
@@ -28,7 +26,6 @@ The analysis follows the conceptual approach described by Ceccherini et al. (202
 ![EU Forest Observatory forest-loss monitoring workflow](docs/figures/workflow_overview.jpg)
 
 *Figure 1. Processing workflow for the EU Forest Observatory forest-loss monitoring chain. Hansen Global Forest Change, Tyukavina fire-loss, and Curtis driver data are processed in Google Earth Engine, aggregated to approximately 2 km and 20 km grids, analysed in R to identify extreme loss events, and returned to Earth Engine for country-level statistics. The final country CSV files are processed in R to generate stacked plots of harvest, fire-related loss, and extreme events.*
-
 
 ## Repository structure
 

@@ -27,8 +27,7 @@ The analysis follows the conceptual approach described by Ceccherini et al. (202
 ├── gee/
 │   ├── 01_prepare_annual_loss_assets.js
 │   ├── 02_aggregate_to_20km.js
-│   ├── 04_country_statistics.js
-│   └── 04_country_statistics_US_GAUL1.js
+│   └── 04_country_statistics.js
 ├── R/
 │   ├── 03_detect_extreme_loss.R
 │   └── 05_plot_country_forest_loss.R
@@ -109,7 +108,7 @@ Forest2000_at_2km_2025GlobalFires_10
 loss_YYYY_at_2km_2025GlobalFires_10
 ```
 
-The legacy names contain `at_2km` or `at_15km`, but the actual target grid is defined by `0.02` degrees. At the equator this is approximately 2.2 km. Physical cell dimensions vary with latitude because the grid is geographic rather than a constant-distance metric projection.
+The legacy names contain `at_2km`, but the actual target grid is defined by `0.02` degrees. At the equator this is approximately 2.2 km. Physical cell dimensions vary with latitude because the grid is geographic rather than a constant-distance metric projection.
 
 ### 2. Aggregate annual assets to approximately 20 km
 
@@ -207,34 +206,50 @@ A latitude-aware area calculation would be necessary if the same denominator wer
 
 `gee/04_country_statistics.js` combines:
 
--   the R-derived extreme-event mask;
--   the Curtis forest-loss-driver map;
--   the Hansen tree-cover and forest-loss bands;
--   the annual fire-related loss product;
--   country boundaries;
--   country-specific tree-cover thresholds.
+- the R-derived extreme-event mask;
+- the Curtis forest-loss-driver map;
+- the Hansen tree-cover and forest-loss bands;
+- the annual fire-related forest-loss product developed by Tyukavina and colleagues;
+- country boundaries;
+- country-specific tree-cover thresholds.
 
 #### Input assets
 
 The extreme-event mask is loaded as an Earth Engine asset, for example:
 
-``` javascript
+```javascript
 ee.Image("projects/ee-guido/assets/MASKGEE2025Fires")
 ```
 
 The Curtis driver map is loaded as:
 
-``` javascript
+```javascript
 ee.Image("projects/tmf-monitoring/assets/CurtisDrivers2018/FilledMap")
 ```
 
+The fire-related loss layers are loaded from the Tyukavina fire-loss product, including the annual product used elsewhere in the workflow:
+
+```javascript
+ee.ImageCollection(
+  "users/sashatyu/2001-2025_fire_forest_loss_annual"
+).mosaic()
+```
+
+These fire data are used together with the Hansen Global Forest Change loss data because their annual disturbance information is intended to be spatially and temporally compatible with the Hansen forest-loss product. The fire-related layers are used to identify and quantify loss associated with fire, while the fire mask is also used to exclude fire-affected pixels from the harvest-oriented loss signal. The exact Tyukavina product version and asset ID should be recorded for each analysis release.
+
+The Curtis driver map represents the spatial classification of dominant drivers of global forest loss developed in the influential *Science* paper by Curtis et al. (2018), “Classifying drivers of global forest loss.” The map separates forest loss into broad driver classes, including forestry, commodity-driven deforestation, shifting agriculture, wildfire, and urbanisation.
+
 The script restricts the analysis to:
 
-``` javascript
+```javascript
 CURTIS.eq(3)
 ```
 
-In the current analysis, class 3 represents forestry-related loss. The class definition should be verified against the legend and version of the Curtis asset used for the analysis.
+In the Curtis asset used here, class 3 represents forestry-related loss. This filter restricts the subsequent analysis to loss pixels attributed to forestry, rather than including all Hansen-detected forest loss. The selected class and its legend should always be verified against the specific Curtis asset version before interpreting the results.
+
+The Curtis map is therefore used as a driver-based spatial filter, not as a replacement for the Hansen loss-detection product or for independent validation of individual disturbances.
+
+> **Future option:** For future analyses, the Curtis driver layer could be replaced or complemented by the newer World Resources Institute (WRI) forest-loss-driver dataset. Such a change would require checking the driver definitions, spatial resolution, temporal coverage, class coding, and compatibility with the Hansen loss product before replacing `CURTIS.eq(3)`.
 
 #### Extreme-event year coding
 
@@ -246,22 +261,22 @@ Each country is assigned an individual forest tree-cover threshold through the `
 
 The country-specific thresholds were calibrated following the approach described by Ceccherini et al. (2020). They are intended to make the forest area detected from Hansen more comparable with the national forest area reported through the FAO Forest Resources Assessment (FRA), accessed through FAOSTAT.
 
-The calibration procedure is:
+The calibration procedure, which is not implemented in the supplied country-statistics script, is:
 
-1.  Apply a series of candidate `treecover2000` thresholds to each country, using increments of 5%.
-2.  Calculate the Hansen-derived forest area for each candidate threshold.
-3.  Compare the resulting area with the corresponding FAO/FRA national forest-area benchmark.
-4.  Select the threshold that minimises the difference between the Hansen-derived and FAO/FRA forest areas.
+1. Apply a series of candidate `treecover2000` thresholds to each country, using increments of 5%.
+2. Calculate the Hansen-derived forest area for each candidate threshold.
+3. Compare the resulting area with the corresponding national forest-area benchmark from FAO/FRA.
+4. Select the threshold that minimises the difference between the Hansen-derived and FAO/FRA forest areas.
 
-The values in `list_t` should therefore be interpreted as country-specific calibration parameters, not as universal ecological definitions of forest. They reflect the threshold that best reconciles the Hansen product with the selected national FRA benchmark under the calibration procedure.
+The values in `list_t` should therefore be interpreted as country-specific calibration parameters, not as universal ecological definitions of forest. They represent the threshold that best reconciles the Hansen product with the selected national FRA benchmark under the calibration procedure.
 
-The calibration is tied to the Hansen dataset version, FRA reference data, reference year, and area-comparison method used during calibration. If the Hansen product or the FRA benchmark is updated, the thresholds should be reviewed or recalculated.
+The calibration is tied to the Hansen dataset version, FRA reference data, reference year, and area-comparison method used during calibration. If the Hansen product or FRA benchmark is updated, the thresholds should be reviewed or recalculated.
 
 #### Country-level area statistics
 
 For each country, the script applies the corresponding calibrated threshold and calculates annual loss areas at 30 m using:
 
-``` javascript
+```javascript
 ee.Image.pixelArea()
 ```
 
@@ -269,48 +284,14 @@ The grouped reducer converts annual loss codes into wide CSV columns such as `su
 
 Three CSV families are produced:
 
-1.  `Country_Forest_Change_EUOBS_<CODE>.csv` — total forest loss by loss year.
-2.  `Country_Forest_Change_EUOBS_fires<CODE>.csv` — fire-related loss by year, excluding cells classified as extreme events.
-3.  `Country_Forest_Change_EUOBS_Wind<CODE>.csv` — loss in cells classified as extreme events.
+1. `Country_Forest_Change_EUOBS_<CODE>.csv` — total Hansen forest loss by loss year within the selected forestry-driver mask.
+2. `Country_Forest_Change_EUOBS_fires<CODE>.csv` — Tyukavina fire-related forest loss by year, with extreme-event cells excluded according to the workflow mask.
+3. `Country_Forest_Change_EUOBS_Wind<CODE>.csv` — loss in cells classified as extreme events by the R-derived mask. The legacy filename uses `Wind`, but the mask represents statistically extreme loss events and should not automatically be interpreted as confirmed wind damage without independent validation.
 
-The `<CODE>` suffix is the project-specific code used by the Earth Engine export. The plotting script does not rely on an external country lookup table; it reads the full country name directly from the `ADM0_NAME` field in the total-loss CSV.
-
-### 4a. United States: GAUL level-1 divide-and-conquer workflow
-
-The standard `gee/04_country_statistics.js` script can exceed Google Earth Engine's computational limits for the United States because the country geometry and high-resolution grouped reductions create a very large computation.
-
-For the United States only, use the additional script:
-
-``` text
-gee/04_country_statistics_US_GAUL1.js
-```
-
-This script performs the same conceptual extraction as `gee/04_country_statistics.js`, but applies a divide-and-conquer strategy:
-
-1.  Select the United States.
-2.  Split its geometry into first-level administrative units from the GAUL level-1 collection.
-3.  Run the grouped loss-area reduction separately for each GAUL1 region.
-4.  Export the resulting country-level or region-combined tables using the same three filename families as the standard workflow.
-
-This reduces the computational burden of each Earth Engine operation while preserving the same loss, fire, and extreme-event categories. The resulting CSV files must be copied into the same directory used by the standard country outputs:
-
-``` text
-data/intermediate/
-```
-
-The downstream R script reads the files from that common directory and does not need to know whether they were produced by the standard country script or by the United States GAUL1 script. The expected filenames remain:
-
-``` text
-Country_Forest_Change_EUOBS_<US_CODE>.csv
-Country_Forest_Change_EUOBS_fires<US_CODE>.csv
-Country_Forest_Change_EUOBS_Wind<US_CODE>.csv
-```
-
-Before running the R plotting script, verify that the United States files generated by the GAUL1 workflow use the same filename convention and that their `ADM0_NAME` field identifies the United States consistently. If the GAUL1 export produces multiple files rather than one country-level file per category, they must first be merged into the corresponding three country-level CSVs.
-
+The `<CODE>` suffix is the project-specific code used by the Earth Engine export. The plotting script does not rely on an external country lookup table: it reads the full country name directly from the `ADM0_NAME` field in the total-loss CSV and uses the same filename code to locate the corresponding fire and extreme-event files.
 ### 5. Create country-level plots in R
 
-`R/05_plot_country_forest_loss.R` reads the country-level CSV outputs generated in step 4. The current script uses the files themselves as the authoritative country index and does not use `table.csv`.
+`R/05_plot_country_forest_loss.R` reads the country-level CSV outputs generated in step 4.
 
 It lists files matching:
 
@@ -380,7 +361,7 @@ data/processed/country_forest_loss/
 ## Reproducible execution
 
 1.  Open `gee/01_prepare_annual_loss_assets.js` in the Earth Engine Code Editor.
-2.  Confirm the Hansen and fire-product versions, analysis boundary, forest threshold, and export region.
+2.  Confirm the Hansen and fire-product versions (update annually!), analysis boundary, forest threshold, and export region.
 3.  Start the annual loss and forest-denominator asset exports.
 4.  Wait until all Earth Engine asset tasks have completed.
 5.  Update the asset IDs in `gee/02_aggregate_to_20km.js`.
@@ -402,14 +383,6 @@ data/processed/country_forest_loss/
 -   Confirm that every total-loss CSV has a matching fires CSV and Wind CSV.
 -   Verify that `ADM0_NAME` is present and non-empty in every total-loss CSV.
 -   Check that the same filename code is used for all three country file families.
--   Verify that the total, fire, and extreme-event files contain the expected annual `sum_` fields.
--   Confirm that `sum_0`, when present in fire files, is excluded from Hansen loss-year calculations.
--   Check that the country-level residual satisfies `Harvest + Fires + ExtremeEvents` approximately equal to total loss, subject to clipping and rounding.
--   Investigate countries where the residual harvest value is clipped to zero.
--   Compare selected country totals with direct 30 m Earth Engine calculations.
--   Confirm that the Curtis class selected by `CURTIS.eq(3)` corresponds to the intended forestry driver class for the asset version used.
--   Confirm that the R extreme-event mask and the country-level Wind outputs refer to the same time period.
--   Check that the United States GAUL1 outputs have been merged or formatted into the same three country-level CSV families before running the R script.
 -   Record any countries skipped because of missing files, empty exports, or Earth Engine task failures.
 
 ## Data dictionary
@@ -446,7 +419,7 @@ Ceccherini et al. (2020) used aggregated satellite-derived forest-loss informati
 ## Limitations and interpretation
 
 -   The 0.02-degree and 0.2-degree grids are geographic grids, not constant-distance metric grids.
--   Values before country-level conversion are pixel counts or square metres, depending on the processing stage; they must not be interpreted without reference to the relevant section.
+-   Values before country-level conversion are pixel counts or square metres, depending on the processing stage.
 -   The `640000` denominator is appropriate for the relative forest-coverage screening fraction but not for latitude-independent area conversion.
 -   The extreme-event mask identifies statistical anomalies in the aggregated loss time series. It should not automatically be interpreted as confirmed wind damage without independent validation.
 -   The country-specific thresholds depend on the Hansen and FAO/FRA versions and calibration procedure used.
@@ -459,7 +432,3 @@ Ceccherini et al. (2020) used aggregated satellite-derived forest-loss informati
 -   Curtis, P. G., Slay, C. M., Harris, N. L., Tyukavina, A., and Hansen, M. C. (2018). Classifying drivers of global forest loss. *Science*, 361, 1108–1111. <https://doi.org/10.1126/science.aau3445>
 -   Hansen, M. C., et al. (2013). High-resolution global maps of 21st-century forest cover change. *Science*, 342, 850–853. <https://doi.org/10.1126/science.1244693>
 -   Tyukavina, A., et al. (2022). Global trends of forest loss due to fire, 2001–2019. *Frontiers in Remote Sensing*. <https://doi.org/10.3389/frsen.2022.825190>
-
-## Status
-
-This repository documents an operational research workflow. Before public release, add the project-specific software license, confirm redistribution permissions for external datasets and derived assets, and archive the exact input versions, Earth Engine task configurations, threshold vectors, and output files used for each analysis release.

@@ -1,3 +1,9 @@
+---
+output:
+  html_document: default
+  pdf_document: default
+---
+
 # EU Forest Observatory: Forest Loss Monitoring
 
 Google Earth Engine and R workflow for producing annual forest-loss layers, aggregating them to approximately 2 km and 20 km grids, detecting extreme loss events, and generating country-level statistics and plots by disturbance type.
@@ -19,33 +25,41 @@ The workflow consists of:
 
 The analysis follows the conceptual approach described by Ceccherini et al. (2020), including spatial aggregation, exclusion of fire-affected loss, and separation of abrupt or extreme disturbances from the normal loss signal. The reproducibility materials for the original study are available through Zenodo: [code](https://doi.org/10.5281/zenodo.3687096) and [data](https://doi.org/10.5281/zenodo.3687090).
 
+![EU Forest Observatory forest-loss monitoring workflow](docs/figures/workflow_overview.jpg)
+
+*Figure 1. Processing workflow for the EU Forest Observatory forest-loss monitoring chain. Hansen Global Forest Change, Tyukavina fire-loss, and Curtis driver data are processed in Google Earth Engine, aggregated to approximately 2 km and 20 km grids, analysed in R to identify extreme loss events, and returned to Earth Engine for country-level statistics. The final country CSV files are processed in R to generate stacked plots of harvest, fire-related loss, and extreme events.*
+
+
 ## Repository structure
 
 ``` text
 .
-├── README.md
-├── gee/
-│   ├── 01_prepare_annual_loss_assets.js
-│   ├── 02_aggregate_to_20km.js
-│   └── 04_country_statistics.js
-├── R/
-│   ├── 03_detect_extreme_loss.R
-│   └── 05_plot_country_forest_loss.R
-└── data/
-    ├── raw/
-    │   ├── FinalLoss_at_20km_2025Fires.tif
-    │   └── Forest2000_at_20km_2025Fires.tif
-    ├── intermediate/
-    │   ├── MASKGEE2025Fires.tif
-    │   ├── Country_Forest_Change_EUOBS_<CODE>.csv
-    │   ├── Country_Forest_Change_EUOBS_fires<CODE>.csv
-    │   └── Country_Forest_Change_EUOBS_Wind<CODE>.csv
-    └── processed/
-        └── country_forest_loss/
-            ├── <GEE_CODE>.csv
-            ├── AllCountries_ForestLoss.csv
-            └── figures/
-                └── Plot_<GEE_CODE>.png
+|-- README.md
+|-- docs/
+|   `-- figures/
+|       `-- workflow_overview.png
+|-- gee/
+|   |-- 01_prepare_annual_loss_assets.js
+|   |-- 02_aggregate_to_20km.js
+|   `-- 04_country_statistics.js
+|-- R/
+|   |-- 03_detect_extreme_loss.R
+|   `-- 05_plot_country_forest_loss.R
+`-- data/
+    |-- raw/
+    |   |-- FinalLoss_at_20km_2025Fires.tif
+    |   `-- Forest2000_at_20km_2025Fires.tif
+    |-- intermediate/
+    |   |-- MASKGEE2025Fires.tif
+    |   |-- Country_Forest_Change_EUOBS_<CODE>.csv
+    |   |-- Country_Forest_Change_EUOBS_fires<CODE>.csv
+    |   `-- Country_Forest_Change_EUOBS_Wind<CODE>.csv
+    `-- processed/
+        `-- country_forest_loss/
+            |-- <GEE_CODE>.csv
+            |-- AllCountries_ForestLoss.csv
+            `-- figures/
+                `-- Plot_<GEE_CODE>.png
 ```
 
 The exact asset IDs, Earth Engine project names, and local file paths should be adapted to the execution environment. The scripts use legacy project-specific names in several places; these are documented below.
@@ -206,30 +220,30 @@ A latitude-aware area calculation would be necessary if the same denominator wer
 
 `gee/04_country_statistics.js` combines:
 
-- the R-derived extreme-event mask;
-- the Curtis forest-loss-driver map;
-- the Hansen tree-cover and forest-loss bands;
-- the annual fire-related forest-loss product developed by Tyukavina and colleagues;
-- country boundaries;
-- country-specific tree-cover thresholds.
+-   the R-derived extreme-event mask;
+-   the Curtis forest-loss-driver map;
+-   the Hansen tree-cover and forest-loss bands;
+-   the annual fire-related forest-loss product developed by Tyukavina and colleagues;
+-   country boundaries;
+-   country-specific tree-cover thresholds.
 
 #### Input assets
 
 The extreme-event mask is loaded as an Earth Engine asset, for example:
 
-```javascript
+``` javascript
 ee.Image("projects/ee-guido/assets/MASKGEE2025Fires")
 ```
 
 The Curtis driver map is loaded as:
 
-```javascript
+``` javascript
 ee.Image("projects/tmf-monitoring/assets/CurtisDrivers2018/FilledMap")
 ```
 
 The fire-related loss layers are loaded from the Tyukavina fire-loss product, including the annual product used elsewhere in the workflow:
 
-```javascript
+``` javascript
 ee.ImageCollection(
   "users/sashatyu/2001-2025_fire_forest_loss_annual"
 ).mosaic()
@@ -241,7 +255,7 @@ The Curtis driver map represents the spatial classification of dominant drivers 
 
 The script restricts the analysis to:
 
-```javascript
+``` javascript
 CURTIS.eq(3)
 ```
 
@@ -263,10 +277,10 @@ The country-specific thresholds were calibrated following the approach described
 
 The calibration procedure, which is not implemented in the supplied country-statistics script, is:
 
-1. Apply a series of candidate `treecover2000` thresholds to each country, using increments of 5%.
-2. Calculate the Hansen-derived forest area for each candidate threshold.
-3. Compare the resulting area with the corresponding national forest-area benchmark from FAO/FRA.
-4. Select the threshold that minimises the difference between the Hansen-derived and FAO/FRA forest areas.
+1.  Apply a series of candidate `treecover2000` thresholds to each country, using increments of 5%.
+2.  Calculate the Hansen-derived forest area for each candidate threshold.
+3.  Compare the resulting area with the corresponding national forest-area benchmark from FAO/FRA.
+4.  Select the threshold that minimises the difference between the Hansen-derived and FAO/FRA forest areas.
 
 The values in `list_t` should therefore be interpreted as country-specific calibration parameters, not as universal ecological definitions of forest. They represent the threshold that best reconciles the Hansen product with the selected national FRA benchmark under the calibration procedure.
 
@@ -276,7 +290,7 @@ The calibration is tied to the Hansen dataset version, FRA reference data, refer
 
 For each country, the script applies the corresponding calibrated threshold and calculates annual loss areas at 30 m using:
 
-```javascript
+``` javascript
 ee.Image.pixelArea()
 ```
 
@@ -284,12 +298,11 @@ The grouped reducer converts annual loss codes into wide CSV columns such as `su
 
 Three CSV families are produced:
 
-1. `Country_Forest_Change_EUOBS_<CODE>.csv` — total Hansen forest loss by loss year within the selected forestry-driver mask.
-2. `Country_Forest_Change_EUOBS_fires<CODE>.csv` — Tyukavina fire-related forest loss by year, with extreme-event cells excluded according to the workflow mask.
-3. `Country_Forest_Change_EUOBS_Wind<CODE>.csv` — loss in cells classified as extreme events by the R-derived mask. The legacy filename uses `Wind`, but the mask represents statistically extreme loss events and should not automatically be interpreted as confirmed wind damage without independent validation.
+1.  `Country_Forest_Change_EUOBS_<CODE>.csv` — total Hansen forest loss by loss year within the selected forestry-driver mask.
+2.  `Country_Forest_Change_EUOBS_fires<CODE>.csv` — Tyukavina fire-related forest loss by year, with extreme-event cells excluded according to the workflow mask.
+3.  `Country_Forest_Change_EUOBS_Wind<CODE>.csv` — loss in cells classified as extreme events by the R-derived mask. The legacy filename uses `Wind`, but the mask represents statistically extreme loss events and should not automatically be interpreted as confirmed wind damage without independent validation.
 
-The `<CODE>` suffix is the project-specific code used by the Earth Engine export. The plotting script does not rely on an external country lookup table: it reads the full country name directly from the `ADM0_NAME` field in the total-loss CSV and uses the same filename code to locate the corresponding fire and extreme-event files.
-### 5. Create country-level plots in R
+The `<CODE>` suffix is the project-specific code used by the Earth Engine export. The plotting script does not rely on an external country lookup table: it reads the full country name directly from the `ADM0_NAME` field in the total-loss CSV and uses the same filename code to locate the corresponding fire and extreme-event files. \### 5. Create country-level plots in R
 
 `R/05_plot_country_forest_loss.R` reads the country-level CSV outputs generated in step 4.
 
@@ -352,10 +365,20 @@ Outputs are written to:
 
 ``` text
 data/processed/country_forest_loss/
-├── <GEE_CODE>.csv
-├── AllCountries_ForestLoss.csv
-└── figures/
-    └── Plot_<GEE_CODE>.png
+|-- <GEE_CODE>.csv
+|-- AllCountries_ForestLoss.csv
+`-- figures/
+    `-- Plot_<GEE_CODE>.png
+```
+
+```{=html}
+<!--
+# ``` markdown
+# ![Example country-level forest-loss plot](data/processed/country_forest_loss/figures/Plot_AR.png)
+# 
+# *Figure 2. Example country-level stacked bar plot. Annual forest loss is partitioned into the residual harvest component, Tyukavina fire-related loss, and statistically extreme loss events. Areas are expressed in thousands of hectares. The example is generated directly from the country-level CSV outputs produced by the Earth Engine country-statistics workflow.*
+# ```
+-->
 ```
 
 ## Reproducible execution

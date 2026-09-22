@@ -448,3 +448,4 @@ Ceccherini et al. (2020) used aggregated satellite-derived forest-loss informati
 -   Curtis, P. G., Slay, C. M., Harris, N. L., Tyukavina, A., and Hansen, M. C. (2018). Classifying drivers of global forest loss. *Science*, 361, 1108–1111. <https://doi.org/10.1126/science.aau3445>
 -   Hansen, M. C., et al. (2013). High-resolution global maps of 21st-century forest cover change. *Science*, 342, 850–853. <https://doi.org/10.1126/science.1244693>
 -   Tyukavina, A., et al. (2022). Global trends of forest loss due to fire, 2001–2019. *Frontiers in Remote Sensing*. <https://doi.org/10.3389/frsen.2022.825190>
+-   Food and Agriculture Organization of the United Nations. (2015). *Global Forest Resources Assessment 2015*. Food and Agriculture Organization of the United Nations. [http://www.fao.org/forest-resources-assessment/en/](http://www.fao.org/forest-resources-assessment/en/)

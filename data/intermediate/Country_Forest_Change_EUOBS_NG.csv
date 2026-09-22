@@ -1,0 +1,2 @@
+system:index,ADM0_CODE,ADM0_NAME,DISP_AREA,EXP0_YEAR,STATUS,STR0_YEAR,Shape_Area,Shape_Leng,groups,sum_13,sum_14,sum_21,sum_9,.geo
+00000000000000000038,181,Niger,NO,3000,Member State,1000,100.679977013,53.3817737755,"[{lossyear=9, sum=0.0}, {lossyear=13, sum=0.0}, {lossyear=14, sum=0.0}, {lossyear=21, sum=0.0}]",0.0,0.0,0.0,0.0,"{""type"":""MultiPoint"",""coordinates"":[]}"

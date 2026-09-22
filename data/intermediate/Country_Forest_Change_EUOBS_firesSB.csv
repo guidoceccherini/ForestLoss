@@ -1,0 +1,2 @@
+system:index,ADM0_CODE,ADM0_NAME,DISP_AREA,EXP0_YEAR,STATUS,STR0_YEAR,Shape_Area,Shape_Leng,groups,sum_0,sum_18,sum_2,sum_21,.geo
+00000000000000000049,210,Saint Pierre et Miquelon,NO,3000,FR Territory,1000,0.0275412286865,2.13684974566,"[{b1=0, sum=56124.37395689721}, {b1=2, sum=0.0}, {b1=18, sum=0.0}, {b1=21, sum=0.0}]",56124.37395689721,0.0,0.0,0.0,"{""type"":""MultiPoint"",""coordinates"":[]}"

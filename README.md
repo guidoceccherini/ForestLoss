@@ -12,7 +12,7 @@ This repository documents a processing chain developed for the EU Forest Observa
 4.  A first Google Earth Engine aggregation from approximately 30 m to a nominal 0.02-degree grid (approximately 2 km).
 5.  A second Earth Engine aggregation from the approximately 2 km layers to a 0.2-degree grid (approximately 20 km).
 6.  An R-based robust outlier procedure, applied to the 0.2-degree forest and loss rasters produced in step 5, that uses the median and median absolute deviation (MAD) of each grid cell's relative loss time series to flag years of anomalously high forest loss as extreme-loss events.
-7.  A final Earth Engine workflow producing country-level annual statistics for total forest loss, fire-related loss, and extreme-loss events.
+7.  A final Earth Engine workflow producing country-level annual statistics and plots for total forest loss, fire-related loss, and extreme-loss events.
 
 The analysis follows the conceptual approach described in Ceccherini et al. (2020), including spatial aggregation and the separation of abrupt or extreme disturbances from the normal loss signal. The original Nature study and its reproducibility materials are available through Zenodo: [code](https://doi.org/10.5281/zenodo.3687096) and [data](https://doi.org/10.5281/zenodo.3687090).
 
@@ -26,10 +26,19 @@ The analysis follows the conceptual approach described in Ceccherini et al. (202
 │   ├── 02_aggregate_to_20km.js
 │   └── 04_country_statistics.js
 ├── R/
-│   └── 03_detect_extreme_loss.R
-├── data/
-│   ├── raw/                 # Local GeoTIFFs downloaded from Earth Engine
-│   └── intermediate/        # R-derived rasters and intermediate products
+│   ├── 03_detect_extreme_loss.R
+│   └── 05_plot_country_forest_loss.R
+└── data/
+    ├── raw/                 # Local GeoTIFFs downloaded from Earth Engine and table.csv
+    ├── intermediate/        # R-derived rasters and intermediate products
+    └── processed/           # R-derived rasters and intermediate products
+        └── country_forest_loss/
+            ├── <ISO3>.csv        # optional cached long-format table per country
+            └── figures/
+                └── Plot_<ISO3>.png
+
+
+
 ```
 
 ## Workflow
@@ -92,7 +101,7 @@ The current supplied script loads loss assets from 2004 onward.
 
 ### 3. Detect extreme loss events in R
 
-`R/03_detect_extreme_loss.R` reads the two 0.2-degree GeoTIFFs with the `raster` package:
+`R/03_detect_extreme_loss.R` reads the two 0.2-degree GeoTIFFs (i.e. the exports of the gee code 02_aggregate_to_20km) with the `raster` package:
 
 ``` r
 Final_loss <- stack("Data2025/FinalLoss_at_20km_2025Fires.tif")
@@ -158,7 +167,14 @@ The simplification would become a real limitation only if this denominator were 
 -   country boundaries;
 -   country-specific tree-cover thresholds.
 
-The Curtis layer is loaded as:
+
+The first step is to load the R-derived extreme-event mask as an asset to identify extreme events. The extreme-event mask is loaded as:
+
+``` javascript
+ee.Image("projects/ee-guido/assets/MASKGEE2025Fires")
+```
+
+Then the Curtis layer is loaded as:
 
 ``` javascript
 ee.Image("projects/tmf-monitoring/assets/CurtisDrivers2018/FilledMap")
@@ -188,6 +204,59 @@ This calibration procedure (again, not shown here, see Ceccherini et al. 2020) w
 
 -   The threshold that minimises the discrepancy between the Hansen-derived forest area and the FAO/FRA benchmark is selected as that country's calibrated tree-cover threshold.
 
+
+
+### 5. Visualize country-level forest loss by disturbance type
+
+`R/05_plot_country_forest_loss.R` uses the three per-country CSV outputs produced by `gee/04_country_statistics.js` (total loss, fire-related loss, and extreme-event loss) and produces one stacked bar chart per country, showing annual forest loss decomposed into harvest, fires, and extreme events. This script merges and simplifies the two separate legacy R scripts previously used for this step: one that built a per-country long-format CSV from the raw Earth Engine exports, and a second that read those per-country CSVs and rendered the plots. The two steps are now combined into a single pass over the country list, removing the intermediate `DataReport25/` CSV write as a required step and keeping it only as an optional cache.
+
+#### Country lookup table (`table.csv`)
+
+The country lookup table is a standard country-code reference table with one row per country and the following columns, based on its header row:
+
+| Column | Header | Example value | Role in this workflow |
+|------------------|------------------|------------------|------------------|
+| A | Flag | (icon, not used) | Not used. |
+| B | Member Countries | Afghanistan | Human-readable country name, used for plot titles. |
+| C | ISO3166 | AF | ISO 3166-1 alpha-2 code. Not used directly here. |
+| D | ISONumeric | 4 | ISO 3166-1 numeric code. Not used directly here. |
+| E | ISO3 | AFG | ISO 3166-1 alpha-3 code, used to name output files and label countries in the merged dataset. |
+| F | FIPS | AF | Two-letter FIPS 10-4 code. This matches the country-label suffix (`list_cL`) used when exporting the CSVs from `gee/04_country_statistics.js`, and is therefore the key used to find each country's three input CSV files. |
+| G | ccTLD | af | Country-code top-level domain. Not used directly here. |
+
+Only three columns are needed for this script: the country name (column B, for plot titles), the ISO3 code (column E, for output file names and the merged dataset's `Country` field), and the FIPS code (column F, for locating the Earth Engine export files). 
+
+#### Processing logic
+
+For each valid country in the lookup table:
+
+1.  Build the expected file paths for the three Earth Engine exports using the country's FIPS code: the total-loss CSV, the fire-loss CSV, and the extreme-event ("Wind") CSV.
+2.  Skip the country if any of the three files is missing.
+3.  In each CSV, select only the annual loss-year columns (the `sum_<code>` columns) and pivot them to long format with `Year` and `Area`.
+4.  Aggregate each of the three long tables by `Year` with `sum(Area, na.rm = TRUE)`, collapsing any sub-national rows into a single national total per year.
+5.  Join the three yearly totals (all loss, fires, extreme events) by `Year`, replacing missing matches with zero.
+6.  Derive the harvest component as the residual: `Harvest = TotalLoss - Fires - ExtremeEvents`, clipping any negative values to zero. This residual approach assumes the three categories are mutually exclusive and exhaustive, consistent with how the masks are applied upstream in the country-statistics script.
+7.  Clean the `Year` field by stripping the `sum_` prefix, converting it to numeric, and adding 2000 to convert the Hansen year code to a calendar year.
+8.  Filter to the years actually covered by the extreme-event mask (year code `>= 11`, i.e. 2011 onward) so that harvest, fire, and extreme-event totals are compared over the same period.
+9.  Reshape the three components to long format (`Harvest`, `Fires`, `ExtremeEvents`) and tag each row with the country's ISO3 code and full name.
+10. Convert area from square metres to thousands of hectares for plotting (divide by `10,000 * 1,000`).
+
+#### Plotting logic
+
+For each country, the script renders a single stacked bar chart with `ggplot2`:
+
+-   x-axis: `Year`;
+-   y-axis: area in thousands of hectares;
+-   fill: disturbance category (`Harvest`, `Fires`, `ExtremeEvents`), stacked with `geom_bar(position = "stack", stat = "identity")`;
+-   a fixed category order and a fixed three-colour palette so that the same disturbance type always has the same colour across all country plots;
+-   the country's full name (from column B of the lookup table) as the plot title, and axis and legend styling consistent with the project's figure style.
+
+Each country's chart is saved as a PNG named after its ISO3 code, into a dedicated output folder.
+
+
+
+
+
 ## Reproducible execution
 
 1.  Open `gee/01_prepare_annual_loss_assets.js` in the Earth Engine Code Editor.
@@ -197,7 +266,8 @@ This calibration procedure (again, not shown here, see Ceccherini et al. 2020) w
 5.  Download the GeoTIFFs into the local `data/raw/` directory.
 6.  Run `R/03_detect_extreme_loss.R` in RStudio and inspect the denominator, relative-loss, MAD, and extreme-event maps.
 7.  Upload `MASKGEE2025Fires.tif` to Earth Engine and update its project asset ID in `gee/04_country_statistics.js`.
-8.  Run the country-statistics script and retrieve the generated CSV files from Google Drive.
+8.  Run the country-statistics script `04_country_statistics` and retrieve the generated CSV files from Google Drive.
+9.  Run the plot script `05_plot_country_forest_loss` and retrieve the generated png files.
 
 ## Data dictionary
 

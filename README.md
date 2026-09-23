@@ -367,6 +367,14 @@ data/processed/country_forest_loss/
     `-- Plot_<GEE_CODE>.png
 ```
 
+
+
+![Example country-level forest-loss plot](data/processed/country_forest_loss/figures/Plot_AR.png)
+
+*Figure 2. Example country-level stacked bar plot. Annual forest loss is partitioned into the residual harvest component, Tyukavina fire-related loss, and statistically extreme loss events. Areas are expressed in thousands of hectares. The example is generated directly from the country-level CSV outputs produced by the Earth Engine country-statistics workflow.*
+
+
+
 ```{=html}
 <!--
 # ``` markdown
